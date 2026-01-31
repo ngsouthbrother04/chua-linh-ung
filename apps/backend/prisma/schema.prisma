@@ -1,0 +1,33 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model PointOfInterest {
+  id              String   @id @default(uuid())
+  name            Json     // { "vi": "...", "en": "..." }
+  description     Json     // { "vi": "...", "en": "..." }
+  
+  // PostGIS geometry format (stored as raw Polygon)
+  // Prisma doesn't natively support PostGIS types nicely yet, so we use Unsupported type
+  // or handle via raw SQL. For now, we will treat it as Unsupported to generate the table properly.
+  geom            Unsupported("geometry(Polygon, 4326)")
+
+  triggerMetadata Json?    // { "debounceSeconds": 5, "priority": 1 }
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("points_of_interest")
+}

@@ -4,8 +4,11 @@
   "description": "AI Agent project powered by Google Antigravity",
   "private": true,
   "scripts": {
-    "dev": "echo \"No dev server configured\"",
-    "build": "echo \"No build script\""
+    "dev:backend": "cd apps/backend && npm run dev",
+    "dev:mobile": "cd apps/mobile && npm start",
+    "db:up": "docker-compose up -d",
+    "db:down": "docker-compose down",
+    "build:backend": "cd apps/backend && npm run build"
   },
   "keywords": [
     "ai",

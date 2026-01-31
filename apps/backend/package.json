@@ -14,16 +14,18 @@
   "license": "ISC",
   "dependencies": {
     "@types/express": "^5.0.6",
-    "@types/node": "^25.1.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
-    "nodemon": "^3.1.11",
-    "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "nodemon": "^3.1.11"
   },
   "devDependencies": {
-    "@types/cors": "^2.8.19"
+    "@prisma/client": "^6.19.0",
+    "@types/cors": "^2.8.19",
+    "@types/node": "^25.1.0",
+    "prisma": "^6.19.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
   }
 }
