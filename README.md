@@ -11,6 +11,48 @@
 
 Hệ thống giải quyết vấn đề thiếu hướng dẫn viên và rào cản ngôn ngữ bằng cách cung cấp trải nghiệm du lịch tự túc thông minh. Ứng dụng di động sẽ tự động phát nội dung thuyết minh (TTS) khi du khách đi vào vùng địa lý (Geofence) của các điểm tham quan (POI).
 
+## 🚀 Getting Started (Hướng dẫn Cài đặt)
+
+### 1. Yêu cầu Hệ thống (Prerequisites)
+Để chạy dự án này, bạn cần cài đặt:
+- **Node.js**: Phiên bản 18+.
+- **Docker Desktop**: Để chạy Database (PostgreSQL + Redis).
+- **Expo Go**: Cài trên điện thoại (iOS/Android) để chạy thử Mobile App.
+
+### 2. Cài đặt (Installation)
+
+Clone repository và cài đặt thư viện cho toàn bộ dự án:
+
+```bash
+git clone https://github.com/ngsouthbrother04/chua-linh-ung.git
+npm install
+```
+
+### 3. Chạy Ứng dụng
+
+Dự án được cấu hình sẵn các lệnh tiện lợi tại thư mục gốc (`root`):
+
+**Bước 1: Khởi động Database**
+Chạy PostgreSQL (Cổng 5433) và Redis (Cổng 6379) qua Docker:
+```bash
+npm run db:up
+```
+
+**Bước 2: Chạy Backend API**
+Backend sẽ chạy tại `http://localhost:3000`.
+```bash
+npm run dev:backend
+```
+
+**Bước 3: Chạy Mobile App**
+Sử dụng Expo để chạy ứng dụng trên thiết bị thật hoặc máy ảo:
+```bash
+npm run dev:mobile
+```
+*Sau khi chạy lênh, quét mã QR hiển thị trên Terminal bằng ứng dụng Expo Go.*
+
+---
+
 ## 🏗️ Tài liệu & Cấu trúc
 
 Dự án tuân thủ quy trình phát triển phần mềm chặt chẽ với hệ thống tài liệu đầy đủ:
