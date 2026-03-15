@@ -48,7 +48,12 @@ Sử dụng Expo để chạy ứng dụng trên thiết bị thật hoặc máy
 ```bash
 npm run dev:mobile
 ```
-*Sau khi chạy lênh, quét mã QR hiển thị trên Terminal bằng ứng dụng Expo Go.*
+*Sau khi chạy lệnh, quét mã QR hiển thị trên Terminal bằng ứng dụng Expo Go.*
+
+## 📌 Scope README
+
+README là điểm vào nhanh cho setup và điều hướng tài liệu.
+Các hành vi nghiệp vụ và default runtime/timing được xem là nguồn chuẩn tại **[`SPEC_CANONICAL.md`](./SPEC_CANONICAL.md)**.
 
 ---
 
@@ -90,6 +95,10 @@ npm run docs:check-prd-sync
 ```
 
 ## 🛠️ Tech Stack
+
+Current baseline (đang dùng trong repo hiện tại):
+- React Native `0.81.x`
+- Expo SDK `54`
 
 - **Mobile App**:
   - Framework: **React Native** (Expo Managed Workflow).
