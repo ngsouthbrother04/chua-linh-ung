@@ -53,7 +53,7 @@ graph TD
 - **Language**: TypeScript
 - **Database**:
   - `PostgreSQL` + `PostGIS`: Stores POIs, Users, Telemetry, and Geospatial Data.
-  - **Schema Note**: POIs stored in `pois` table with `GEOMETRY(POLYGON, 4326)` column.
+  - **Schema Note**: POIs stored in `points_of_interest` table with `GEOMETRY(POLYGON, 4326)` column.
 
 ---
 
@@ -82,7 +82,7 @@ graph TD
 **Transitions**:
 - `IDLE` -> `ENTER_EVENT` -> `DETECTED`
 - `DETECTED` -> `TIMER_EXPIRED` -> `PLAYING` (Trigger `expo-speech.speak()`)
-- `PLAYING` -> `EXIT_EVENT` -> `IDLE` (Trigger `expo-speech.stop()`)
+- `PLAYING` -> `EXIT_EVENT` -> `COOLDOWN` (Trigger `expo-speech.stop()`)
 - `PLAYING` -> `ENTER_NEW_POI` -> `INTERRUPTED` -> `PLAYING (New POI)`
 
 ### 3.3 Data Synchronization (The "One-Load" Pattern)

@@ -8,7 +8,8 @@
     "dev:mobile": "cd apps/mobile && npm start",
     "db:up": "docker-compose up -d",
     "db:down": "docker-compose down",
-    "build:backend": "cd apps/backend && npm run build"
+    "build:backend": "cd apps/backend && npm run build",
+    "docs:check-prd-sync": "bash scripts/check-prd-sync.sh"
   },
   "keywords": [
     "ai",

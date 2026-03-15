@@ -33,8 +33,8 @@
 ### UC3 – QR Code Activation
 
 - **Trigger**: QR scan via `expo-camera`.
-- **Bypass**: GPS verification (Geofence Engine is ignored).
-- **Execution**: Narration Engine (Forces State: `PLAYING`).
+- **Bypass**: GPS sensing only (manual fallback path, not automatic location trigger).
+- **Execution**: Narration Engine (dispatch `MANUAL_TRIGGER`, still enforces single voice + interrupt rules).
 - **Constraint**: Fixed-location POI only.
 
 ---

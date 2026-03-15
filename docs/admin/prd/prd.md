@@ -1,3 +1,11 @@
+# Legacy Notice
+
+Tài liệu này là bản PRD cũ (monolithic) và đã được thay thế bởi bộ PRD tách file tại cùng thư mục.
+
+Vui lòng sử dụng điểm vào chính: [index.md](index.md).
+
+---
+
 ## 2. Product Requirements Document (PRD)
 
 ### 2.1 Problem Alignment

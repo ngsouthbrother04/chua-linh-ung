@@ -20,7 +20,7 @@ Core principle:
 AI-generated code **MUST always preserve** the following invariants:
 
 ### 2.1 Geofence Engine = Decision Core
-- All decisions about *when* narration starts or stops originate from the **Geofence Engine**.
+- All **automatic location-based** decisions about *when* narration starts or stops originate from the **Geofence Engine**.
 - GPS tracking alone must **never** directly trigger audio playback.
 
 ### 2.2 Narration Engine Responsibilities
@@ -81,6 +81,7 @@ Disallowed:
 - QR codes are allowed ONLY as a fallback trigger
 - QR codes MUST NOT be associated with moving points (e.g., bus stops)
 - QR codes represent fixed, physical POIs
+- QR trigger is a **manual override path** and MUST still pass through the Narration Engine state machine (single voice + interrupt rules)
 
 ---
 
@@ -88,7 +89,7 @@ Disallowed:
 
 AI MUST NOT:
 - Allow narration outside POI boundaries
-- Bypass the Geofence Engine
+- Bypass the Geofence Engine for automatic GPS flow
 - Remove analytics logging
 - Assume continuous internet connectivity
 
@@ -110,7 +111,7 @@ When generating code or analysis, assume:
 - **Core Features**: Location services, Background tasks (expo-task-manager), **TTS (expo-speech)**, SQLite (expo-sqlite).
 
 ### 9.2 Backend API
-- **Runtime**: Node.js + Express (TypeScript).
+- **Runtime**: Node.js 20+ + Express (TypeScript).
 - **Reasoning**: Lightweight, fast prototyping, shared language with mobile.
 - **Protocol**: REST API (primary).
 
@@ -136,4 +137,3 @@ When generating code or analysis, assume:
 ---
 
 **End of AI_GUIDELINES**
-

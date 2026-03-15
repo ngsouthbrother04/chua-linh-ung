@@ -104,7 +104,7 @@
 |  | 4. System triggers TTS | `expo-speech.speak(text)` |
 
 ### Constraints
-- QR codes bypass Geofence checks but share the same Audio Engine state (Single Voice Rule).
+- QR codes bypass GPS sensing only, but still use the same Narration/Audio state machine (Single Voice Rule).
 
 ---
 
