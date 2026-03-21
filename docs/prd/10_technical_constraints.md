@@ -26,7 +26,7 @@
 | Secure Storage | `expo-secure-store` | AuthToken storage (encrypted) |
 | Deep Linking | Expo Linking | `chualinhung://payment-result` callback |
 
-**Backend API** *(xem ARCHITECTURE.md và admin PRD để biết chi tiết)*:
+**Backend API** *(xem ARCHITECTURE.md cho admin dashboard details)*:
 
 - Runtime: Node.js 20+ / Express.js (TypeScript)
 - Database: PostgreSQL + PostGIS

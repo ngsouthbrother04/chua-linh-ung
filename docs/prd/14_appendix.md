@@ -40,18 +40,16 @@
 
 ---
 
-### 18.2 Tài liệu liên quan
+### 18.2 Related Documents
 
-| Tài liệu | Đường dẫn | Mô tả |
-|---------|-----------|-------|
-| Admin PRD (Index) | `docs/admin/prd/index.md` | PRD đầy đủ cho GPS Admin Dashboard |
-| Architecture Document | `ARCHITECTURE.md` | Mô tả chi tiết kiến trúc hệ thống |
-| AI Guidelines | `AI_GUIDELINES.md` | Invariants, business rules cho AI assistant |
-| Use Cases | `USE_CASES.md` | UC1–UC5 chi tiết |
-| Use Case Mapping | `USE_CASE_MAPPING.md` | Ma trận mapping UC ↔ Features |
-| Backend Design | `docs/backend_design.md` | Chi tiết API, database schema |
-| Test Scenarios | `docs/test_scenarios.md` | Kịch bản kiểm thử đầy đủ |
-| User PRD (Index) | `docs/user/prd/index.md` | Tài liệu PRD user app hiện tại |
+| Document | Path | Description |
+|----------|------|-------------|
+| System Architecture | [ARCHITECTURE.md](../../ARCHITECTURE.md) | Mô tả chi tiết kiến trúc hệ thống |
+| AI Guidelines | [AI_GUIDELINES.md](../../AI_GUIDELINES.md) | Invariants, business rules cho AI assistant |
+| Use Cases | [USE_CASES.md](../../USE_CASES.md) | UC1–UC5 chi tiết |
+| Use Case Mapping | [USE_CASE_MAPPING.md](../../USE_CASE_MAPPING.md) | Ma trận mapping UC ↔ Features |
+| Backend Design | [docs/backend_design.md](../backend_design.md) | Chi tiết API, database schema |
+| Test Scenarios | [docs/test_scenarios.md](../test_scenarios.md) | Kịch bản kiểm thử đầy đủ |
 
 ---
 
@@ -60,4 +58,4 @@
 | Version | Date | Author | Changes |
 |---------|------|--------|---------|
 | 0.1 | 2024-01 | Initial | Tạo PRD tóm tắt đầu tiên (~100 lines) |
-| 1.0 | 2025-07 | AI-assisted | Viết lại toàn bộ theo cấu trúc 14 files, nhất quán với admin PRD |
+| 1.0 | 2026-03 | AI-assisted | Viết lại toàn bộ theo cấu trúc 14 files, hợp nhất admin & user PRD thành unified PRD |

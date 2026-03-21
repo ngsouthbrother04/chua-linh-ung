@@ -83,6 +83,6 @@ Các tính năng sau **không được bao gồm** trong MVP v1.0:
 - Chức năng lưu lịch sử tham quan giữa các phiên
 - Bản đồ 3D hoặc AR navigation
 - Tải âm thanh MP3 có sẵn (chỉ dùng on-device TTS)
-- Admin features (xem admin PRD riêng)
+- Admin features (xem ARCHITECTURE.md cho admin dashboard details)
 - Realtime cập nhật POI trong phiên tham quan
 - Routing / chỉ đường tự động giữa các POI

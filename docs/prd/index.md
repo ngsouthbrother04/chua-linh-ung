@@ -40,8 +40,7 @@
 
 | Document | Location |
 |----------|----------|
-| Admin Dashboard PRD | [docs/admin/prd/index.md](../../admin/prd/index.md) |
-| System Architecture | [ARCHITECTURE.md](../../../ARCHITECTURE.md) |
-| AI Guidelines | [AI_GUIDELINES.md](../../../AI_GUIDELINES.md) |
-| Use Cases | [USE_CASES.md](../../../USE_CASES.md) |
-| Use Case Mapping | [USE_CASE_MAPPING.md](../../../USE_CASE_MAPPING.md) |
+| System Architecture | [ARCHITECTURE.md](../../ARCHITECTURE.md) |
+| AI Guidelines | [AI_GUIDELINES.md](../../AI_GUIDELINES.md) |
+| Use Cases | [USE_CASES.md](../../USE_CASES.md) |
+| Use Case Mapping | [USE_CASE_MAPPING.md](../../USE_CASE_MAPPING.md) |
