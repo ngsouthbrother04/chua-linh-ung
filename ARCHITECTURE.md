@@ -13,19 +13,19 @@ The system operates as a **Hybrid Offline-first Mobile Architecture**.
 ```mermaid
 graph TD
     subgraph "Cloud Infrastructure (Managed)"
-        Admin[Admin Dashboard] -->|Content Upd| API[Backend API (Node.js)]
+        Admin[Admin Dashboard] -->|Content Upd| API["Backend API (Node.js)"]
         API -->|Read/Write| Postgres[(PostgreSQL - Primary)]
         API -->|Cache| Redis[(Redis)]
     end
 
     subgraph "Mobile Client (React Native / Expo)"
-        Sync[Data Sync Service] -->|REST Fetch| API
-        Sync -->|Write| LocalDB[(SQLite - Local Mirror)]
+        Sync["Data Sync Service"] -->|REST Fetch| API
+        Sync -->|Write| LocalDB[("SQLite - Local Mirror")]
         
         Geo[Geofencing Engine] -->|Read Polygons| LocalDB
         Geo -->|Events| State[State Machine]
         
-        State -->|Trigger| TTS[TTS Engine (expo-speech)]
+        State -->|Trigger| TTS["TTS Engine (expo-speech)"]
         State -->|Log| Analytics[Analytics Buffer]
         
         Analytics -->|Batch Upload| API
