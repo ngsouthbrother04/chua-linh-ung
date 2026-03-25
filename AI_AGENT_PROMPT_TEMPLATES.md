@@ -1,89 +1,56 @@
-# AI Agent Prompt Templates
+# AI Docs Reading Map For Agent
 
-Bộ prompt mẫu giúp team làm việc nhất quán với AI agent, tránh lệch tài liệu và giảm vibe-coding.
+Mục đích: AI chỉ cần đọc file này là biết toàn bộ tài liệu nằm ở đâu và phải đọc theo thứ tự nào.
 
-> **Nguyên tắc vận hành:**
->
-> - Mỗi task chỉ giao đúng 1 chức năng — không gộp nhiều module trong 1 prompt.
-> - AI bắt buộc báo mapping AC trước khi kết thúc.
+## 1) Điểm vào chính
 
----
+1. /README.md
+2. /TEAM_START_HERE.md
+3. /SPEC_CANONICAL.md
 
-## Thứ tự đọc tài liệu chuẩn
+## 2) Khối tài liệu PRD
 
-Tất cả các template đều yêu cầu đọc theo thứ tự này:
+1. /docs/prd/index.md
+2. /docs/prd/01_executive_summary.md
+3. /docs/prd/02_personas_and_user_stories.md
+4. /docs/prd/03_functional_requirements.md
+5. /docs/prd/04_acceptance_criteria.md
+6. /docs/prd/05_non_functional_requirements.md
+7. /docs/prd/06_data_requirements.md
+8. /docs/prd/07_api_design.md
+9. /docs/prd/08_ui_ux.md
+10. /docs/prd/09_business_rules.md
+11. /docs/prd/10_technical_constraints.md
+12. /docs/prd/11_risks_and_open_questions.md
+13. /docs/prd/12_success_criteria.md
+14. /docs/prd/13_future_enhancements.md
+15. /docs/prd/14_appendix.md
+16. /docs/prd/15_admin_requirements.md
 
-1. `README.md` (SOURCE OF TRUTH)
-2. `TEAM_START_HERE.md`
-3. `SPEC_CANONICAL.md`
-4. `docs/prd/index.md`
-5. `docs/prd/03_functional_requirements.md`
-6. `docs/prd/04_acceptance_criteria.md`
-7. `EXECUTION_TODO_ISSUES.md`
+## 3) Khối tài liệu vận hành và triển khai
 
-Nếu có xung đột giữa tài liệu, áp dụng thứ tự ưu tiên trong `SPEC_CANONICAL.md`, với `README.md` ở vị trí cao nhất.
+1. /MASTER_INDEX.md
+2. /ARCHITECTURE.md
+3. /USE_CASES.md
+4. /USE_CASE_MAPPING.md
+5. /IMPLEMENTATION_TASK_BREAKDOWN.md
+6. /TASK_ASSIGN.md
+7. /EXECUTION_TODO_ISSUES.md
+8. /AI_GUIDELINES.md
 
----
+## 4) Tài liệu kỹ thuật chi tiết bổ sung
 
-## Template 1 — Chức năng tổng quát
+1. /docs/backend_design.md
+2. /docs/test_scenarios.md
 
-**Mục tiêu:** Implement đúng 1 chức năng `<TEN_CHUC_NANG>`.
+## 5) Thứ tự đọc bắt buộc cho AI
 
-**Thông tin task:**
+1. Đọc theo thứ tự: Mục 1 -> Mục 2 -> Mục 3 -> Mục 4.
+2. Nếu có mâu thuẫn nội dung, ưu tiên theo thứ tự:
+README.md -> SPEC_CANONICAL.md -> docs/prd/04_acceptance_criteria.md -> các tài liệu còn lại.
 
-- Issue: `<ISSUE_ID>`
-- Files được sửa: `<DANH_SACH_FILE>`
-- AC cần pass: `<DANH_SACH_AC>`
-- Không được thay đổi: `<INVARIANTS_HOAC_DEFAULTS>`
+## 6) Prompt mẫu dùng chung cho cả team
 
----
-
-## Template 2 — Backend API
-
-**Mục tiêu:** Implement endpoint `<TEN_ENDPOINT>` cho chức năng `<TEN_CHUC_NANG>`.
-
-**Bối cảnh kỹ thuật:** Node.js 20+, Express, TypeScript.
-
-**Yêu cầu thực thi:**
-
-1. Đọc tài liệu theo thứ tự chuẩn, xác nhận contract request/response trước khi code
-2. Implement route, validation, error handling và status code đúng chuẩn
-3. Không hardcode dữ liệu nếu đã có nguồn từ DB/schema
-
----
-
-## Template 3 — Bản đồ & Tương tác Thuyết minh
-
-**Mục tiêu:** Implement chức năng `<TEN_CHUC_NANG>` trong luồng tương tác bản đồ.
-
-**Invariants bắt buộc (không được vi phạm):**
-
-1. Quyền quyết định nghe thuộc về User (Tap vào marker bản đồ)
-2. Single Voice Rule: Chỉ một narration tại một thời điểm
-3. Khi chọn quán mới, âm thanh của quán cũ phải Stop lập tức.
-4. QR là fallback thủ công, vẫn tuân theo Single Voice Rule.
-
-**Yêu cầu thực thi:**
-
-1. Tách rõ event tap bản đồ và audio action
-2. Update State Machine (Play/Pause/Stop) đúng transition chuẩn
-
----
-
-## Template 4 — UI Flow
-
-**Mục tiêu:** Implement UI flow `<TEN_FLOW>`.
-
-**Yêu cầu thực thi:**
-
-1. Tham khảo bảng màu ấm áp của Phố Ẩm Thực.
-2. Tách rõ state UI, data source và action handlers.
-
----
-
-## Template 5 — Code Review
-
-**Trọng tâm review:**
-
-1. Sai phạm invariant theo `SPEC_CANONICAL.md` và `README.md`.
-2. Hồi quy behavior ngoài phạm vi chức năng (đặc biệt là Play/Stop âm thanh).
+```text
+Hãy đọc toàn bộ tài liệu theo đúng thứ tự trong file AI_AGENT_PROMPT_TEMPLATES.md, sau đó thực hiện đúng 1 chức năng tôi giao; khi hoàn thành phải báo rõ: phạm vi đã làm, file đã sửa, đối chiếu AC pass/fail và rủi ro còn lại.
+```
