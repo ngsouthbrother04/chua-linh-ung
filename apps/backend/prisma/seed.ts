@@ -1,85 +1,75 @@
 /// <reference types="node" />
 import "dotenv/config";
-import { PrismaClient, PoiType, AnalyticsAction } from "../src/generated/prisma/client";
+import { PrismaClient } from "../src/generated/prisma/client";
+import { buildSeedDataset } from "../src/services/seedService";
 
 const prisma = new PrismaClient();
 
 async function main() {
-  const poi1 = await prisma.pointOfInterest.upsert({
-    where: { id: "poi-uuid-1" },
-    update: {
-      name: { vi: "Pho Thin Lo Duc", en: "Pho Thin Lo Duc" },
-      description: {
-        vi: "Pho bo xao lan dac trung Ha Noi",
-        en: "Classic Hanoi stir-fried beef pho",
-      },
-      audioUrls: {
-        vi: "https://cdn.phoamthuc.local/audio/vi/pho-thin.mp3",
-        en: "https://cdn.phoamthuc.local/audio/en/pho-thin.mp3",
-      },
-      latitude: "21.016300",
-      longitude: "105.855700",
-      type: PoiType.FOOD,
-      image: "https://cdn.phoamthuc.local/poi/pho-thin.jpg",
-      contentVersion: 1,
-    },
-    create: {
-      id: "poi-uuid-1",
-      name: { vi: "Pho Thin Lo Duc", en: "Pho Thin Lo Duc" },
-      description: {
-        vi: "Pho bo xao lan dac trung Ha Noi",
-        en: "Classic Hanoi stir-fried beef pho",
-      },
-      audioUrls: {
-        vi: "https://cdn.phoamthuc.local/audio/vi/pho-thin.mp3",
-        en: "https://cdn.phoamthuc.local/audio/en/pho-thin.mp3",
-      },
-      latitude: "21.016300",
-      longitude: "105.855700",
-      type: PoiType.FOOD,
-      image: "https://cdn.phoamthuc.local/poi/pho-thin.jpg",
-      contentVersion: 1,
-    },
-  });
+  const dataset = buildSeedDataset(1, Date.now());
 
-  await prisma.tour.upsert({
-    where: { id: "tour-uuid-1" },
-    update: {
-      name: { vi: "Lo trinh Buoi Sang", en: "Morning Route" },
-      description: {
-        vi: "Bua sang voi pho va ca phe",
-        en: "Morning food route with pho and coffee",
-      },
-      duration: 90,
-      poiIds: [poi1.id],
-      image: "https://cdn.phoamthuc.local/tours/morning.jpg",
-      contentVersion: 1,
-    },
-    create: {
-      id: "tour-uuid-1",
-      name: { vi: "Lo trinh Buoi Sang", en: "Morning Route" },
-      description: {
-        vi: "Bua sang voi pho va ca phe",
-        en: "Morning food route with pho and coffee",
-      },
-      duration: 90,
-      poiIds: [poi1.id],
-      image: "https://cdn.phoamthuc.local/tours/morning.jpg",
-      contentVersion: 1,
-    },
-  });
+  await prisma.$transaction(async (tx) => {
+    for (const poi of dataset.pois) {
+      await tx.pointOfInterest.upsert({
+        where: { id: poi.id },
+        update: {
+          name: poi.name,
+          description: poi.description,
+          audioUrls: poi.audioUrls,
+          latitude: poi.latitude,
+          longitude: poi.longitude,
+          type: poi.type,
+          image: poi.image,
+          contentVersion: poi.contentVersion,
+        },
+        create: {
+          id: poi.id,
+          name: poi.name,
+          description: poi.description,
+          audioUrls: poi.audioUrls,
+          latitude: poi.latitude,
+          longitude: poi.longitude,
+          type: poi.type,
+          image: poi.image,
+          contentVersion: poi.contentVersion,
+        },
+      });
+    }
 
-  await prisma.analyticsEvent.create({
-    data: {
-      deviceId: "seed-device-001",
-      sessionId: "seed-session-001",
-      poiId: poi1.id,
-      action: AnalyticsAction.PLAY,
-      durationMs: 0,
-      language: "vi-VN",
-      timestamp: BigInt(Date.now()),
-      uploaded: false,
-    },
+    for (const tour of dataset.tours) {
+      await tx.tour.upsert({
+        where: { id: tour.id },
+        update: {
+          name: tour.name,
+          description: tour.description,
+          duration: tour.duration,
+          poiIds: tour.poiIds,
+          image: tour.image,
+          contentVersion: tour.contentVersion,
+        },
+        create: {
+          id: tour.id,
+          name: tour.name,
+          description: tour.description,
+          duration: tour.duration,
+          poiIds: tour.poiIds,
+          image: tour.image,
+          contentVersion: tour.contentVersion,
+        },
+      });
+    }
+
+    await tx.analyticsEvent.deleteMany({
+      where: {
+        sessionId: {
+          startsWith: "seed-session-",
+        },
+      },
+    });
+
+    await tx.analyticsEvent.createMany({
+      data: dataset.analyticsEvents,
+    });
   });
 }
 
