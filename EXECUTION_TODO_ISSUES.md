@@ -125,17 +125,18 @@ Release scope:
 | AUTH-01 - Payment initiation flow | PASS | `POST /api/v1/auth/payment/initiate` implemented + tests in `apps/backend/tests/auth.routes.test.ts` | Supports `vnpay` and `momo` mapping to provider enum |
 | AUTH-01 - Payment callback/finalize flow | PASS | `POST /api/v1/auth/payment/callback` implemented + tests in `apps/backend/tests/auth.routes.test.ts` | Includes HMAC verification, callback timestamp TTL, idempotency key persistence |
 | SYNC-01 - Manifest endpoint | PASS | `GET /api/v1/sync/manifest` implemented + tests in `apps/backend/tests/sync.routes.test.ts` | Checksum uses content-aware stable hash |
-| SYNC-02 - Full sync endpoint | PASS | `GET /api/v1/sync/full` implemented + tests in `apps/backend/tests/sync.routes.test.ts` | Requires Bearer token format and validates version query |
+| SYNC-02 - Full sync endpoint | PASS | `GET /api/v1/sync/full` implemented + unit/runtime tests in `apps/backend/tests/sync.routes.test.ts` and `apps/backend/tests/sync.integration.test.ts` | Requires Bearer token format, validates version query, and short-circuits when client version is already current (`needsSync=false`) |
+| CORE-01 - Schema/config merge conflict management | PASS | `git diff --name-status origin/main...3122560001 -- apps/backend/prisma/schema.prisma apps/backend/package.json apps/backend/tsconfig.json apps/backend/src/index.ts` | No divergence on conflict-sensitive files; branch conflict risk for backend core schema/config is currently clear |
 | Error handling utility integration | PASS | ApiError + async handler + global/not-found middleware in backend | Tests in `apps/backend/tests/error-handling.middleware.test.ts` |
 | Gzip response compression | PASS | `compression` middleware enabled in backend bootstrap | Configured with threshold `0` |
-| Regression check - tests and build | PASS | `npm test` => 13/13 passed; `npm run build` => success | Re-run confirmed green on 2026-03-25 |
+| Regression check - tests and build | PASS | `npm test` => 22/22 passed; `npm run build` => success | Re-run confirmed green on 2026-03-25 |
 
 ### Residual risks
 
 | Risk | Level | Impact | Mitigation / Next action |
 |---|---|---|---|
 | Provider-specific webhook verification not yet fully aligned to real VNPay/MoMo signature specs | MEDIUM | Callback security may not match production gateway requirements | Implement gateway-specific verifier per provider docs before production rollout |
-| Current test suite focuses on route/middleware unit tests; DB integration coverage is still limited | LOW | Runtime regressions in Prisma transaction edge-cases may be missed | Add integration tests against test DB for payment finalize/idempotency paths |
+| Payment finalize/idempotency paths still lack dedicated DB integration tests | LOW | Runtime regressions in payment callback transaction edges may be missed | Add integration tests against test DB for payment finalize/idempotency paths |
 | Auth token generation currently uses internal JWT signing without key rotation workflow | LOW | Long-term ops/security maintainability risk | Add key rotation strategy and secret management policy for production |
 
 ### Go / No-Go

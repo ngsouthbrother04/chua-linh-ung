@@ -65,6 +65,14 @@ describe('SYNC routes', () => {
   it('GET /api/v1/sync/full should return full payload when token is valid', async () => {
     const app = createApp();
 
+    vi.mocked(getSyncManifest).mockResolvedValue({
+      contentVersion: 6,
+      totalPois: 10,
+      totalTours: 2,
+      lastUpdatedAt: new Date().toISOString(),
+      checksum: 'sha256-manifest'
+    });
+
     vi.mocked(getSyncFull).mockResolvedValue({
       contentVersion: 6,
       pois: [
@@ -98,7 +106,31 @@ describe('SYNC routes', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.contentVersion).toBe(6);
+    expect(res.body.needsSync).toBe(true);
     expect(res.body.pois).toHaveLength(1);
     expect(res.body.tours).toHaveLength(1);
+  });
+
+  it('GET /api/v1/sync/full should return empty payload when version is up-to-date', async () => {
+    const app = createApp();
+
+    vi.mocked(getSyncManifest).mockResolvedValue({
+      contentVersion: 6,
+      totalPois: 10,
+      totalTours: 2,
+      lastUpdatedAt: new Date().toISOString(),
+      checksum: 'sha256-manifest'
+    });
+
+    const res = await request(app)
+      .get('/api/v1/sync/full?version=6')
+      .set('Authorization', 'Bearer test-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.contentVersion).toBe(6);
+    expect(res.body.needsSync).toBe(false);
+    expect(res.body.pois).toEqual([]);
+    expect(res.body.tours).toEqual([]);
+    expect(getSyncFull).not.toHaveBeenCalled();
   });
 });
