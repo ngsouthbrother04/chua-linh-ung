@@ -1,138 +1,59 @@
-# Section 8: Data Requirements
+# 06. Data Requirements
 
-← [Back to Index](index.md)
-
----
-
-## 8. Data Requirements
-
-### 8.1 POI Data Model (SQLite – Local Mirror)
-
-```typescript
-interface POI {
-  id: string;                           // UUID
-  name: Record<string, string>;         // { "vi": "Phở Thìn", "en": "Thin Pho", ... }
-  description: Record<string, string>;  // Short description, đa ngôn ngữ
-  audioUrls: Record<string, string>;    // URL file âm thanh MP3 { "vi": "url", "en": "url" }
-  latitude: number;                     // Vị trí (float64)
-  longitude: number;                    // Vị trí (float64)
-  type: POIType;                        // FOOD | DRINK | SNACK | WC
-  image: string;                        // URL ảnh đại diện
-}
-
-enum POIType {
-  FOOD   = 'Món chính',
-  DRINK  = 'Đồ uống',
-  SNACK  = 'Ăn vặt',
-  WC     = 'Nhà vệ sinh'
-}
-```
-
-**SQLite Schema:**
-
-```sql
-CREATE TABLE pois (
-  id TEXT PRIMARY KEY,
-  name_json TEXT NOT NULL,          -- JSON string
-  description_json TEXT NOT NULL,   -- JSON string
-  audio_urls_json TEXT NOT NULL,    -- JSON string
-  latitude REAL NOT NULL,
-  longitude REAL NOT NULL,
-  type TEXT NOT NULL,
-  image TEXT,
-  content_version INTEGER NOT NULL  
-);
-
-CREATE INDEX idx_pois_type ON pois(type);
-```
-
-**Field Validation Rules:** Bỏ GeoJSON polygon, chỉ cần điểm lat, lng.
+[Back to Index](index.md)
 
 ---
 
-### 8.2 Tour/Food Route Data Model (SQLite – Local Mirror)
+## 1. Server Source of Truth (PostgreSQL)
 
-```typescript
-interface Tour {
-  id: string;                          
-  name: Record<string, string>;        
-  description: Record<string, string>; 
-  estimatedTime: number;               // Phút ước tính
-  poiIds: string[];                    // Thứ tự POI ăn dọc tuyến
-  image?: string;                      
-  createdAt: string;                   
-}
-```
+Primary tables are aligned with [database_design.md](../database_design.md):
 
-**SQLite Schema:**
+1. points_of_interest
+2. tours
+3. users
+4. claim_codes
+5. analytics_events
+6. payment_transactions
+7. payment_callback_events
+8. app_settings
 
-```sql
-CREATE TABLE tours (
-  id TEXT PRIMARY KEY,
-  name_json TEXT NOT NULL,
-  description_json TEXT NOT NULL,
-  estimated_time INTEGER NOT NULL DEFAULT 0,
-  poi_ids_json TEXT NOT NULL,   
-  image TEXT,
-  created_at TEXT NOT NULL
-);
-```
+### Core POI fields
 
----
+1. id, name JSONB, description JSONB.
+2. audio_urls JSONB keyed by language code.
+3. latitude, longitude.
+4. type enum: FOOD, DRINK, SNACK, WC.
+5. content_version and timestamps.
 
-### 8.3 Sync Manifest
+## 2. Mobile SQLite Mirror
 
-```typescript
-interface SyncManifest {
-  contentVersion: number;    
-  totalPois: number;
-  totalTours: number;
-  lastUpdatedAt: string;     
-  checksum: string;          
-}
-```
+Mobile mirror must contain:
 
----
+1. pois
+2. tours
+3. sync_metadata
 
-### 8.4 User Preferences (Zustand Store + AsyncStorage)
+### Sync metadata contract
 
-```typescript
-interface UserPreferences {
-  selectedLocale: string;   
-  volume: number;           
-}
-```
+sync_metadata stores server version/hash/time markers used by manifest comparison.
 
----
+## 3. Multi-language Data Model
 
-### 8.5 Analytics Telemetry (Local Buffer → Batch Upload)
+1. Server stores localized text in JSONB.
+2. Mobile reads selected language projection from mirrored content.
+3. Fallback chain: requested, English, Vietnamese.
 
-```typescript
-interface UserTelemetry {
-  deviceId: string;      
-  sessionId: string;     
-  interactions: {
-    poiId: string;
-    action: "PLAY" | "PAUSE" | "STOP" | "QR_SCAN";
-    durationMs: number;
-    language: string;
-    timestamp: number;
-  }[];
-}
-```
+## 4. Audio Data Model
 
-**SQLite Schema (Analytics Buffer):**
+1. Audio assets are pre-generated server-side MP3 files.
+2. Mobile caches files locally and plays with expo-av.
+3. No runtime generation on device.
 
-```sql
-CREATE TABLE analytics_events (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  device_id TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  poi_id TEXT,
-  action TEXT NOT NULL,       -- PLAY, PAUSE, STOP, QR_SCAN
-  duration_ms INTEGER,
-  language TEXT,
-  timestamp INTEGER NOT NULL,
-  uploaded INTEGER NOT NULL DEFAULT 0
-);
-```
+## 5. Analytics Data Model
+
+Event payload fields include:
+
+1. deviceId, sessionId, poiId optional.
+2. action enum: TAP, PLAY, PAUSE, STOP, QR_SCAN, language-change and connectivity events.
+3. durationMs optional and timestamp.
+4. uploaded flag for batch transfer lifecycle.

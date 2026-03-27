@@ -1,94 +1,42 @@
-# Section 10: UI/UX Specifications
+# 08. UI and UX
 
-← [Back to Index](index.md)
-
----
-
-## 10. UI/UX Specifications
-
-### 10.1 Design System
-
-**Color Palette:**
-
-- Primary: Vibrant Orange (`#F97316` / orange-500) — kích thích vị giác, năng động
-- Secondary: Chili Red (`#EF4444` / red-500) — ấm áp, ẩm thực
-- Neutral: Slate (`#64748B` / slate-500)
-- Background: Warm White (`#FAFAF8`)
-
-**Typography:**
-
-- Font: System font (iOS: SF Pro, Android: Roboto)
-- Headings: Bold, 700 weight
-- Body: Regular, 400 weight
-
-**Spacing:**
-
-- Dùng RN StyleSheet scale: 4, 8, 12, 16, 20, 24, 32
-- Safe area insets phải được tôn trọng
+[Back to Index](index.md)
 
 ---
 
-### 10.2 Navigation Structure
+## 1. UX Principles
 
-```
-App Navigator
-├── Auth Stack (chưa đăng nhập)
-│   ├── WelcomeScreen      — Chọn mua code/Nhập code
-│   ├── PaymentWebView     — WebView thanh toán
-│   ├── ClaimCodeScreen    — Nhập mã tham gia
-│   └── SyncScreen         — Màn hình loading sync data
-│
-└── Main Tab Navigator (đã đăng nhập)
-    ├── Map Tab            — Bản đồ tổng quan Quán ăn + vị trí khách
-    ├── Explore Tab        — Danh sách gợi ý / Tuyến ẩm thực
-    └── Settings Tab       — Ngôn ngữ, âm lượng, tải lại data
-```
+1. Interaction-first: narration starts only after explicit tap or QR scan.
+2. Exploration-first: map and POI detail access must remain available offline.
+3. Clarity-first: playback state is always visible and controllable.
 
----
+## 2. Navigation Structure
 
-### 10.3 Screen Specifications
+1. Auth stack: claim/payment, then initial sync bootstrap.
+2. Main tabs: map, tours/explore, settings.
+3. QR scanner is reachable from map context.
 
-#### WelcomeScreen
+## 3. Map and POI UX
 
-- Background: Ảnh phố ẩm thực nhộn nhịp
-- Logo hệ thống Phố Ẩm Thực
-- 2 nút lớn: "Mua mã truy cập" và "Nhập mã đã có"
-- Nút "Chọn ngôn ngữ"
+1. Map shows POIs from local SQLite.
+2. Marker tap opens bottom sheet with image, text, and Listen action.
+3. Blue dot indicates user position in foreground mode only.
+4. Nearby highlight is visual-only and does not trigger playback.
 
-#### MapScreen (Tab chính)
+## 4. Playback UX
 
-- **Full-screen map** (MapView của react-native-maps)
-- **Mini Player Bar** (bottom, fixed): hiển thị khi đang phát narration
-  - Tên Quán + Play/Pause, Stop
-- **Floating Action Buttons**:
-  - 📷 Quét QR
-  - 📍 Vị trí của tôi
-- **POI Markers:** marker các quán ăn
-- **Bottom Sheet** khi tap POI marker: ảnh + tên + "Nghe thuyết minh"
+1. Mini player appears on active narration.
+2. Controls: pause, resume, stop.
+3. Transition to new POI playback must immediately stop existing playback.
 
-#### SettingsScreen
+## 5. Language UX
 
-- Chọn ngôn ngữ (Quốc kỳ)
-- Âm lượng TTS slider
-- Nút "Đồng bộ lại nội dung"
-- Nút "Đăng xuất"
+1. Language selector supports 15 languages.
+2. UI and content update consistently after language switch.
+3. Content fallback is data-level fallback (requested, English, Vietnamese).
 
----
+## 6. Offline and Error States
 
-### 10.4 Component Patterns
-
-**Primary Button:**
-`backgroundColor: orange-500`
-
-**Mini Player Bar:**
-`position: absolute, bottom: tabHeight, height: 72px`
-
----
-
-### 10.5 Empty & Error States
-
-**No GPS Permission:**
-"Ứng dụng cần quyền vị trí để hiển thị bạn đang ở đâu trên bản đồ khu phố ẩm thực."
-
-**TTS Language Not Available:**
-"Giọng đọc tiếng [X] không khả dụng trên thiết bị này. Đang dùng tiếng Anh."
+1. If network is unavailable and cache exists, app continues in offline mode.
+2. If network is unavailable and no cache exists, app requests retry sync.
+3. Invalid QR and missing POI show user-safe error without crash.

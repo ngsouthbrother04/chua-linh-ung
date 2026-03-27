@@ -1,76 +1,48 @@
-# Sections 1–2: Executive Summary & Scope
+# 01. Executive Summary
 
-← [Back to Index](index.md)
-
----
-
-## 1. Executive Summary
-
-### 1.1 Overview
-
-Phố Ẩm Thực - Location-Based Food Narration System là ứng dụng di động (React Native / Expo) cung cấp trải nghiệm khám phá ẩm thực tại các khu phố hoặc chợ ẩm thực. Hệ thống cho phép khách tham quan tương tác trực tiếp với bản đồ (tap) hoặc quét mã QR để nghe thuyết minh chi tiết về từng quán ăn, món ăn đặc trưng. Ứng dụng hỗ trợ đa ngôn ngữ và hoạt động hoàn toàn offline sau hệ thống đồng bộ dữ liệu ban đầu.
-
-### 1.2 Goals
-
-**Primary Goal:** Cung cấp trải nghiệm khám phá ẩm thực trực quan, sinh động qua hình thức thuyết minh âm thanh đa ngôn ngữ, người dùng chủ động kiểm soát nội dung nghe thông qua tương tác trên bản đồ (User-interaction-first).
-
-**Secondary Goals:**
-
-- Hỗ trợ đa ngôn ngữ (15+ ngôn ngữ) để phục vụ khách du lịch quốc tế
-- Hoạt động offline hoàn toàn đối với nội dung POI và âm thanh (on-device TTS)
-- Bản đồ tương tác trực quan, định vị người dùng (Location-based nhưng KHÔNG geofence auto-play)
-- Cung cấp tính năng kích hoạt qua mã QR cho các quán ăn
-- Cung cấp gợi ý (Tour/List) các quán ăn theo chủ đề (ví dụ: Món ăn vỉa hè, Ẩm thực truyền thống)
-
-### 1.3 Core Principle
-
-> **User-trigger priority: Thuyết minh chỉ được phát khi người dùng chủ động chọn (tap hoặc quét QR). Hệ thống KHÔNG tự động phát âm thanh dựa trên geofence để tránh làm phiền trải nghiệm tự do khám phá.**
+[Back to Index](index.md)
 
 ---
 
-## 2. Scope Definition
+## 1. Product Overview
 
-### 2.1 In-Scope (MVP v1.0)
+Pho Am Thuc is an offline-first mobile experience for food discovery. Users explore POIs on map and trigger narration only through explicit actions: map tap and QR scan. The system supports 15 languages and enforces strict single-voice playback.
 
-#### Module 1: Xác thực & Truy cập (UC1)
+## 2. Product Goals
 
-- Mở khóa ứng dụng (Free access hoặc Claim code - tuỳ MVP)
-- Đồng bộ toàn bộ dữ liệu POI (quán ăn) xuống thiết bị sau xác thực (One-Load Pattern)
-- Lưu trữ nội dung offline vào SQLite
+### 2.1 Primary Goal
 
-#### Module 2: Khám phá trên Bản đồ (Tap to Play) (UC2)
+Deliver a user-controlled food narration journey where visitors choose what to hear, when to hear, and in which language.
 
-- Hiển thị bản đồ với các điểm POI (quán ăn)
-- Hiển thị vị trí hiện tại của người dùng (Location-based)
-- Người dùng chọn (tap) vào một POI để xem thông tin
-- Nhấn nút "Nghe thuyết minh" để phát âm thanh về quán ăn đó (On-device TTS: expo-speech)
-- Ngừng thuyết minh khi người dùng chủ động bấm dừng hoặc chọn POI khác (Single-voice rule)
+### 2.2 Secondary Goals
 
-#### Module 3: Kích hoạt qua mã QR (UC3)
+1. Ensure offline usability after initial sync via SQLite and MP3 cache.
+2. Maintain consistent narration quality with server-side TTS generation.
+3. Provide fast, reliable map exploration and playback controls.
+4. Enable admin-operated content operations and safe publish flow.
 
-- Quét mã QR đặt tại các quán ăn
-- Tự động hiển thị thẻ thông tin quán ăn và phát thuyết minh
-- Áp dụng quy tắc "một giọng đọc tại một thời điểm"
+## 3. Non-Negotiable Principles
 
-#### Module 4: Chọn Ngôn ngữ & Điều khiển Phát (UC4)
+1. Narration is user-triggered only (tap or QR).
+2. No geofence, no background GPS, no autoplay.
+3. Single Voice Rule is strict: never two narrations at the same time.
+4. Mobile app plays cached MP3 files; no on-device TTS generation.
 
-- Chọn ngôn ngữ thuyết minh (15+ ngôn ngữ)
-- Thay đổi ngôn ngữ ảnh hưởng text, giọng TTS và UI labels
-- Play / Pause / Stop thuyết minh
-- Hiển thị trạng thái phát hiện tại ở Mini Player
+## 4. MVP Scope (Aligned with UC1-UC8)
 
-#### Module 5: Xem Danh sách & Gợi ý (UC5)
+1. UC1 Access and Authorization (claim/payment).
+2. UC2 Explore Map and POI details.
+3. UC3 Play narration from map interaction.
+4. UC4 Scan QR for narration.
+5. UC5 Switch language and settings.
+6. UC6 Playback controls (pause/resume/stop).
+7. UC7 Tour exploration.
+8. UC8 Offline content access.
 
-- Xem danh sách các quán ăn theo danh mục hoặc Tour gợi ý
-- Nhấn vào quán ăn từ danh sách để xem chi tiết trên bản đồ
+## 5. Out of Scope for MVP
 
-### 2.2 Out-of-Scope (Future Enhancements)
-
-Các tính năng sau **không được bao gồm** trong MVP v1.0:
-
-- Tự động phát thuyết minh bằng Geofence (Đã loại bỏ hoàn toàn)
-- Đặt đồ ăn / thanh toán tại quán qua app
-- Upload ảnh / review của khách tham quan
-- Bản đồ 3D / AR navigation
-- Tải file MP3 (chỉ dùng on-device TTS)
-- Realtime cập nhật menu/giá trị trong phiên
+1. Geofence-triggered playback or any automatic playback.
+2. Background location tracking and location history.
+3. On-device text-to-speech generation.
+4. Real-time collaborative or social features.
+5. Microservices/Kafka/RabbitMQ architecture changes.

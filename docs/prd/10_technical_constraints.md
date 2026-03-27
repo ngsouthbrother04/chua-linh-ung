@@ -1,52 +1,43 @@
-# Sections 12–13: Technical Constraints & Dependencies
+# 10. Technical Constraints
 
-← [Back to Index](index.md)
-
----
-
-## 12. Technical Constraints
-
-### 12.1 Technology Stack
-
-**Mobile Application:**
-
-| Layer | Technology | Reason |
-|-------|------------|--------|
-| Framework | React Native 0.81.x (Expo SDK 54) | Cross-platform |
-| Location | `expo-location` | Lấy tọa độ User (chỉ Foreground) |
-| Audio | `expo-av` | Phát file MP3 đã tải về offline |
-| File System | `expo-file-system` | Cache file âm thanh offline |
-| Local DB | `expo-sqlite` | Offline POI |
-| State | `zustand`, `react-query` | Global và Server state |
-| Map | `react-native-maps` | Hiển thị bản đồ |
-| QR Scanner | `expo-camera` | Quét mã tại quán |
-| Secure Storage | `expo-secure-store` | Lưu token |
-
-**Backend API**:
-
-- Runtime: Node.js 20+ / Express.js
-- Database: PostgreSQL + PostGIS
-
-### 12.2 Platform Constraints
-
-**Kiến trúc Đơn giản hóa:**
-Hệ thống KHÔNG CÒN sử dụng Background Location và Geofence. Điều này loại bỏ hoàn toàn các rắc rối về Doze mode, iOS background limitations và battery drain. 
-
-- GPS chỉ dùng ở `Foreground` qua `expo-location` watchPositionAsync.
-
-### 12.3 Known Limitations
-
-1. **Audio Storage Size:** Do ứng dụng tải file MP3 để dùng offline, bộ nhớ ứng dụng sẽ nặng hơn so với việc dùng TTS on-device. Tuy nhiên, thay vào đó là chất lượng vượt trội.
-2. **Map Tiles Offline:** Cần internet để load bản đồ đường sá (Mapbox/Google Maps tiles).
-3. **No Real-Time Update:** Phải re-sync thủ công để cập nhật quán ăn mới.
+[Back to Index](index.md)
 
 ---
 
-## 13. Dependencies & Integrations
+## 1. Required Mobile Stack
 
-### 13.1 External Services
+1. React Native 0.81+ with Expo SDK 54 (managed workflow).
+2. TypeScript 5+.
+3. expo-location for foreground location only.
+4. expo-av for MP3 playback.
+5. expo-sqlite for offline mirror.
+6. expo-file-system for audio cache.
+7. react-native-maps for map rendering.
+8. zustand for app and audio state.
 
-| Service | Purpose |
-|---------|---------|
-| VNPay/Momo | Payment gateway |
-| AWS/CDN | Static assets (ảnh quán) |
+## 2. Required Backend Stack
+
+1. Node.js 20+ with Express.
+2. PostgreSQL with PostGIS.
+3. Prisma ORM.
+4. Redis cache.
+5. Background job worker for TTS generation.
+
+## 3. Hard Constraints
+
+1. No geofence and no background location monitoring.
+2. No on-device TTS generation.
+3. No microservices/Kafka/RabbitMQ for MVP.
+4. No GraphQL for MVP APIs.
+
+## 4. Integration Dependencies
+
+1. Payment providers: VNPay and Momo.
+2. TTS provider: Piper (offline, free, no account).
+3. Storage: audio on local filesystem; images on Cloudinary.
+
+## 5. Known Limitations
+
+1. Cached MP3 assets increase local storage footprint.
+2. Base map tiles may still depend on network provider cache policy.
+3. Data updates are sync-based, not real-time streaming.

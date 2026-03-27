@@ -1,47 +1,26 @@
-# Product Requirements Document (PRD) v1.0
+# PRD Index
 
-# Phố Ẩm Thực - Location-Based Food Narration System
+This document is the canonical entrypoint for all PRD sections.
 
-## Document Information
+## Read Order
 
-| Field | Value |
-|-------|-------|
-| Product Name | Phố Ẩm Thực |
-| Version | 1.0 (MVP) |
-| Document Date | March 2026 |
-| Status | Draft for Development |
-| Owner | Business Analyst / Product Owner |
-| Target Audience | Development Team, QA, Stakeholders |
+1. [01. Executive Summary](01_executive_summary.md)
+2. [02. Personas and User Stories](02_personas_and_user_stories.md)
+3. [03. Functional Requirements](03_functional_requirements.md)
+4. [04. Acceptance Criteria](04_acceptance_criteria.md)
+5. [05. Non-Functional Requirements](05_non_functional_requirements.md)
+6. [06. Data Requirements](06_data_requirements.md)
+7. [07. API Design](07_api_design.md)
+8. [08. UI/UX](08_ui_ux.md)
+9. [09. Business Rules](09_business_rules.md)
+10. [10. Technical Constraints](10_technical_constraints.md)
+11. [11. Risks and Open Questions](11_risks_and_open_questions.md)
+12. [12. Success Criteria](12_success_criteria.md)
+13. [13. Future Enhancements](13_future_enhancements.md)
+14. [14. Appendix](14_appendix.md)
+15. [15. Admin Requirements](15_admin_requirements.md)
 
----
+## Governance
 
-## Table of Contents
-
-| # | Section | File |
-|---|---------|------|
-| 1–2 | Executive Summary & Scope | [01_executive_summary.md](01_executive_summary.md) |
-| 3–4 | User Personas & User Stories | [02_personas_and_user_stories.md](02_personas_and_user_stories.md) |
-| 5 | Detailed Functional Requirements | [03_functional_requirements.md](03_functional_requirements.md) |
-| 6 | Acceptance Criteria (Given-When-Then) | [04_acceptance_criteria.md](04_acceptance_criteria.md) |
-| 7 | Non-Functional Requirements | [05_non_functional_requirements.md](05_non_functional_requirements.md) |
-| 8 | Data Requirements | [06_data_requirements.md](06_data_requirements.md) |
-| 9 | API Assumptions | [07_api_design.md](07_api_design.md) |
-| 10 | UI/UX Specifications | [08_ui_ux.md](08_ui_ux.md) |
-| 11 | Business Rules | [09_business_rules.md](09_business_rules.md) |
-| 12–13 | Technical Constraints & Dependencies | [10_technical_constraints.md](10_technical_constraints.md) |
-| 14–15 | Risks & Open Questions | [11_risks_and_open_questions.md](11_risks_and_open_questions.md) |
-| **15** | **Admin Requirements** | **[15_admin_requirements.md](15_admin_requirements.md)** |
-| 16 | Success Criteria & Acceptance | [12_success_criteria.md](12_success_criteria.md) |
-| 17 | Future Enhancements | [13_future_enhancements.md](13_future_enhancements.md) |
-| 18 | Appendix | [14_appendix.md](14_appendix.md) |
-
----
-
-## Related Documents
-
-| Document | Location |
-|----------|----------|
-| System Architecture | [ARCHITECTURE.md](../../ARCHITECTURE.md) |
-| AI Guidelines | [AI_GUIDELINES.md](../../AI_GUIDELINES.md) |
-| Use Cases | [USE_CASES.md](../../USE_CASES.md) |
-| Use Case Mapping | [USE_CASE_MAPPING.md](../../USE_CASE_MAPPING.md) |
+- This index must be updated whenever PRD sections are added, removed, or renamed.
+- AI reading maps and master index references must stay aligned with this file.

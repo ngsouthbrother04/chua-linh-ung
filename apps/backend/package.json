@@ -9,6 +9,7 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "tts:validate": "ts-node --transpile-only src/scripts/validateTtsConfig.ts",
     "prisma:format": "prisma format --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
@@ -20,14 +21,17 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1017.0",
+    "@types/multer": "^2.1.0",
     "bullmq": "^5.71.0",
+    "cloudinary": "^2.9.0",
     "compression": "^1.8.1",
     "cors": "^2.8.6",
     "dotenv": "^17.2.3",
     "express": "^5.2.1",
-    "google-tts-api": "^2.0.2",
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
+    "multer": "^2.1.1",
     "nodemon": "^3.1.11"
   },
   "devDependencies": {

@@ -1,161 +1,104 @@
-# Section 6: Acceptance Criteria (Given-When-Then)
+# 04. Acceptance Criteria
 
-← [Back to Index](index.md)
+[Back to Index](index.md)
 
 ---
 
-## 6. Acceptance Criteria (Given-When-Then)
+## AC-UC1 Authorization
 
-### AC-001: Thanh toán Online (US-001)
+Traceability 1-1: UC1 -> AC-UC1 -> Gate TC-1.1
 
 ```gherkin
-GIVEN tôi mở ứng dụng lần đầu
-AND tôi chưa xác thực
-WHEN tôi chọn "Thanh toán Online"
-THEN ứng dụng mở WebView với trang thanh toán 
-WHEN tôi hoàn tất thanh toán thành công
-THEN ứng dụng nhận deep link "phoamthuc://payment-result?status=success"
-AND tôi được chuyển đến màn hình đồng bộ nội dung
-AND AuthToken của tôi được lưu trữ an toàn
+GIVEN user is unauthenticated
+WHEN user submits a valid claim code or successful payment callback is received
+THEN system issues a valid auth token and starts initial sync
+AND user can proceed to main map screen after sync bootstrap
 ```
 
-### AC-002: Nhập Mã Tham Gia (US-001)
+## AC-UC2 Explore Map
+
+Traceability 1-1: UC2 -> AC-UC2 -> Gate TC-2.2
 
 ```gherkin
-GIVEN tôi đang ở màn hình xác thực
-WHEN tôi nhấn "Nhập mã tham gia"
-AND tôi nhập mã hợp lệ 6 ký tự "ABC123"
-AND tôi nhấn "Xác nhận"
-THEN ứng dụng xác thực mã với backend
-AND nếu thành công, tôi được chuyển đến màn hình đồng bộ nội dung
-AND mã vé được đánh dấu là đã sử dụng (không thể dùng lại)
-
-GIVEN tôi nhập mã không hợp lệ "XXXXXX"
-WHEN tôi nhấn "Xác nhận"
-THEN tôi thấy lỗi "Mã không hợp lệ hoặc đã được sử dụng."
-AND tôi có thể thử lại
+GIVEN user has synced data
+WHEN map screen opens
+THEN POI markers are rendered from SQLite
+AND user location is shown as blue dot in foreground mode only
+AND no audio starts automatically on location updates
 ```
 
-### AC-003: Đồng bộ Dữ liệu Offline (US-002)
+## AC-UC3 Tap to Play
+
+Traceability 1-1: UC3 -> AC-UC3 -> Gate TC-3.2
 
 ```gherkin
-GIVEN tôi vừa xác thực thành công
-WHEN ứng dụng bắt đầu đồng bộ nội dung
-THEN tôi thấy màn hình loading với thanh tiến trình
-WHEN đồng bộ hoàn tất
-THEN toàn bộ dữ liệu POI (văn bản, tọa độ, thuyết minh) được lưu trong SQLite
-AND tôi được chuyển đến màn hình Bản đồ chính
-AND các lần mở sau KHÔNG cần tải lại nếu phiên bản nội dung không thay đổi
-
-GIVEN tôi không có kết nối internet nhưng đã từng đồng bộ trước đó
-WHEN tôi mở ứng dụng với token hợp lệ
-THEN tôi bỏ qua bước đồng bộ và vào thẳng màn hình Bản đồ
-AND tôi thấy banner "Đang dùng nội dung cũ (ngày [last_sync_date])"
+GIVEN POI detail sheet is visible
+WHEN user taps Listen
+THEN narration starts from cached MP3 in selected language
+AND mini player is visible
+AND if POI-A is already playing and user triggers POI-B, POI-A stops immediately and only POI-B continues
 ```
 
-### AC-004: Phát Thuyết minh khi Nhấn POI trên Bản đồ (US-004)
+## AC-UC4 QR Scan
+
+Traceability 1-1: UC4 -> AC-UC4 -> Gate TC-4.1
 
 ```gherkin
-GIVEN tôi đang xem màn hình Bản đồ
-WHEN tôi nhấn vào một marker đại diện cho "Quán Phở Thìn"
-THEN hiển thị Bottom Sheet thông tin của quán
-WHEN tôi nhấn nút "Nghe thuyết minh" trên Bottom Sheet
-THEN thuyết minh cho "Quán Phở Thìn" bắt đầu phát bằng ngôn ngữ đã chọn
-AND Mini Player xuất hiện ở cuối màn hình
+GIVEN user opens QR scanner and scans valid POI payload
+WHEN POI exists in SQLite
+THEN system dispatches the same play path as tap-to-play
+AND single voice rule is applied
 ```
 
-### AC-005: Dừng Thuyết minh Hiện Tại (Single Voice Rule) (US-005)
+## AC-UC5 Language and Fallback
+
+Traceability 1-1: UC5 -> AC-UC5 -> Gate TC-5.1
 
 ```gherkin
-GIVEN thuyết minh "Quán Phở Thìn" đang phát
-WHEN tôi nhấn vào quán "Bánh Mì Huỳnh Hoa"
-AND tôi nhấn nút "Nghe thuyết minh"
-THEN thuyết minh "Quán Phở Thìn" dừng NGAY LẬP TỨC
-AND thuyết minh "Bánh Mì Huỳnh Hoa" bắt đầu phát
-AND không có sự chồng lấn âm thanh giữa hai quán
+GIVEN user selects a supported language
+WHEN a POI is opened
+THEN text and audio use selected language when available
+AND fallback follows requested then English then Vietnamese
 ```
 
-### AC-006: Hiển thị Vị trí Người dùng (US-006)
+## AC-UC6 Playback Controls
+
+Traceability 1-1: UC6 -> AC-UC6 -> Gate TC-6.3
 
 ```gherkin
-GIVEN tôi đang ở màn hình Bản đồ
-WHEN tôi cấp quyền truy cập vị trí cho ứng dụng
-THEN tôi thấy một chấm xanh trên bản đồ đại diện cho vị trí hiện tại của tôi
-AND chấm xanh di chuyển khi tôi đi bộ trên khu phố
-AND hệ thống KHÔNG tự động phát âm thanh khi di chuyển (chỉ phục vụ định hướng)
+GIVEN narration is playing
+WHEN user presses pause or resume or stop
+THEN state transitions match PLAYING, PAUSED, IDLE contracts
+AND UI reflects current playback state
 ```
 
-### AC-007: Quét QR Code tại Quán (US-007)
+## AC-UC7 Tours
+
+Traceability 1-1: UC7 -> AC-UC7 -> Gate TC-7.1
 
 ```gherkin
-GIVEN tôi đứng trước một quán ăn có mã QR của hệ thống
-WHEN tôi nhấn biểu tượng quét QR trong ứng dụng
-THEN camera mở ra
-WHEN tôi quét mã QR hợp lệ
-THEN ứng dụng tra cứu thông tin quán ăn trong SQLite
-AND nếu đang có thuyết minh khác phát, thuyết minh đó dừng lại
-AND thuyết minh của quán vừa quét bắt đầu phát
-AND màn hình hiển thị thông tin chi tiết của quán
+GIVEN user opens tours
+WHEN a tour is selected
+THEN map filters to ordered tour POIs
+AND narration still requires explicit user trigger
 ```
 
-### AC-008: Chọn Ngôn ngữ (US-008)
+## AC-UC8 Offline
+
+Traceability 1-1: UC8 -> AC-UC8 -> Gate TC-8.1
 
 ```gherkin
-GIVEN tôi đang ở bất kỳ màn hình nào
-WHEN tôi nhấn biểu tượng ngôn ngữ ở góc trên bên phải
-THEN hiển thị modal chọn ngôn ngữ với 15+ lựa chọn
-WHEN tôi chọn "한국어 (Korean)"
-THEN toàn bộ UI chuyển sang tiếng Hàn
-AND giọng TTS chuyển sang ko-KR
-AND các thuyết minh tiếp theo phát bằng tiếng Hàn
-
-GIVEN thiết bị không có engine TTS tiếng Hàn
-WHEN tôi chọn tiếng Hàn
-THEN tôi thấy cảnh báo "Giọng đọc tiếng Hàn không khả dụng trên thiết bị. Sử dụng tiếng Anh."
-AND thuyết minh fallback sang en-US
+GIVEN initial sync completed successfully
+WHEN network is unavailable
+THEN user can still browse POIs and play cached narration
+AND app does not require live API calls for exploration
 ```
 
-### AC-009: Giao diện Đổi theo Ngôn ngữ (US-009)
+## AC-ADMIN Publish Flow
 
 ```gherkin
-GIVEN tôi đã chọn "Français" làm ngôn ngữ
-WHEN tôi xem màn hình danh sách Tour ẩm thực
-THEN toàn bộ label UI, nút bấm hiển thị bằng tiếng Pháp
-AND tên và mô tả quán ăn hiển thị theo nội dung tiếng Pháp (nếu có)
-```
-
-### AC-010: Play / Pause Thuyết minh (US-010)
-
-```gherkin
-GIVEN thuyết minh đang phát
-WHEN tôi nhấn nút Pause trên Mini Player
-THEN thuyết minh dừng tạm thời
-AND nút Pause chuyển thành Play
-
-WHEN tôi nhấn nút Play
-THEN thuyết minh tiếp tục (hoặc phát lại từ đầu nếu thiết bị không hỗ trợ resume)
-
-WHEN tôi nhấn nút Stop (hoặc tắt player)
-THEN thuyết minh dừng hoàn toàn
-AND Mini Player ẩn đi
-```
-
-### AC-011: Xem Danh sách Tour (US-012)
-
-```gherkin
-GIVEN tôi đã đăng nhập và đồng bộ dữ liệu
-WHEN tôi chuyển sang tab "Khám phá"
-THEN tôi thấy danh sách các chủ đề/tuyến gợi ý (ví dụ: Ăn vặt xế chiều) với ảnh, tên và thời gian ước tính.
-```
-
-### AC-012: Xem Lộ trình Tour / Tuyến Ẩm Thực (US-013)
-
-```gherkin
-GIVEN tôi chọn một tuyến "Ăn vặt xế chiều"
-WHEN tôi nhấn xem chi tiết
-THEN tôi thấy danh sách các quán ăn thuộc tuyến này
-AND có nút "Xem trên Bản đồ"
-WHEN tôi nhấn "Xem trên Bản đồ"
-THEN bản đồ hiện ra chỉ với các marker của các điểm trong tuyến
-AND tôi tự chủ động nhấn vào từng quán để nghe khi đến nơi
+GIVEN admin updates POI content
+WHEN admin publishes
+THEN backend regenerates server-side audio assets
+AND sync manifest version increments for clients
 ```

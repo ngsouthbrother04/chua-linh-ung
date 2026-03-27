@@ -5,49 +5,39 @@ Mục đích: AI chỉ cần đọc file này là biết toàn bộ tài liệu 
 ## 1) Điểm vào chính
 
 1. /README.md
-2. /TEAM_START_HERE.md
-3. /SPEC_CANONICAL.md
+2. /SPEC_CANONICAL.md
+3. /AI_GUIDELINES.md
+4. /ARCHITECTURE.md
+5. /docs/backend_design.md
+6. /docs/database_design.md
+7. /USE_CASES.md
+8. /docs/test_scenarios.md
+9. /TEAM_START_HERE.md
+10. /MASTER_INDEX.md
 
 ## 2) Khối tài liệu PRD
 
 1. /docs/prd/index.md
-2. /docs/prd/01_executive_summary.md
-3. /docs/prd/02_personas_and_user_stories.md
-4. /docs/prd/03_functional_requirements.md
-5. /docs/prd/04_acceptance_criteria.md
-6. /docs/prd/05_non_functional_requirements.md
-7. /docs/prd/06_data_requirements.md
-8. /docs/prd/07_api_design.md
-9. /docs/prd/08_ui_ux.md
-10. /docs/prd/09_business_rules.md
-11. /docs/prd/10_technical_constraints.md
-12. /docs/prd/11_risks_and_open_questions.md
-13. /docs/prd/12_success_criteria.md
-14. /docs/prd/13_future_enhancements.md
-15. /docs/prd/14_appendix.md
-16. /docs/prd/15_admin_requirements.md
+2. Đọc toàn bộ section PRD theo đúng thứ tự được quy định trong /docs/prd/index.md.
 
 ## 3) Khối tài liệu vận hành và triển khai
 
-1. /MASTER_INDEX.md
-2. /ARCHITECTURE.md
-3. /USE_CASES.md
-4. /USE_CASE_MAPPING.md
-5. /IMPLEMENTATION_TASK_BREAKDOWN.md
-6. /TASK_ASSIGN.md
-7. /EXECUTION_TODO_ISSUES.md
-8. /AI_GUIDELINES.md
+1. /USE_CASE_MAPPING.md
+2. /IMPLEMENTATION_TASK_BREAKDOWN.md
+3. /TASK_ASSIGN.md
+4. /EXECUTION_TODO_ISSUES.md
 
 ## 4) Tài liệu kỹ thuật chi tiết bổ sung
 
 1. /docs/backend_design.md
-2. /docs/test_scenarios.md
+2. /docs/database_design.md
+3. /docs/test_scenarios.md
 
 ## 5) Thứ tự đọc bắt buộc cho AI
 
 1. Đọc theo thứ tự: Mục 1 -> Mục 2 -> Mục 3 -> Mục 4.
 2. Nếu có mâu thuẫn nội dung, ưu tiên theo thứ tự:
-README.md -> SPEC_CANONICAL.md -> docs/prd/04_acceptance_criteria.md -> các tài liệu còn lại.
+README.md -> SPEC_CANONICAL.md -> AI_GUIDELINES.md -> ARCHITECTURE.md -> docs/backend_design.md -> docs/database_design.md -> USE_CASES.md -> docs/test_scenarios.md -> docs/prd/*.
 
 ## 6) Prompt mẫu dùng chung cho cả team
 

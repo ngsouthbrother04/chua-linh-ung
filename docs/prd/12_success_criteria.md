@@ -1,82 +1,35 @@
-# Section 16: Success Criteria & Acceptance
+# 12. Success Criteria
 
-← [Back to Index](index.md)
+[Back to Index](index.md)
 
 ---
 
-## 16. Success Criteria
+## 1. Functional Completion Criteria
 
-### 16.1 MVP Launch Checklist
+1. UC1 through UC8 are implemented and validated.
+2. No violation of explicit-trigger-only playback behavior.
+3. Single Voice Rule is verified in tap and QR paths.
 
-Tất cả các mục dưới đây phải đạt ✅ trước khi Go Live:
+## 2. Quality Criteria
 
-**Authentication & Authorization:**
-- [ ] User hoàn thành thanh toán VNPay/Momo và nhận được JWT token trong vòng 30 giây
-- [ ] User nhập mã tham gia hợp lệ → vào được nội dung ngay lập tức
-- [ ] JWT token được lưu encrypted trong expo-secure-store
-- [ ] Mã đã dùng → báo lỗi rõ ràng, không crash
+1. Required backend and mobile tests are green.
+2. Test coverage and scenario mapping are aligned with [test_scenarios.md](../test_scenarios.md).
+3. Critical auth/sync/playback regressions have automated tests.
 
-**Bản đồ & Thuyết minh (Tap to Play):**
-- [ ] Bật Location Permission → Vị trí user hiển thị trên bản đồ (Foreground)
-- [ ] Tap vào POI trên bản đồ → hiển thị Bottom Sheet thông tin
-- [ ] Nhấn "Nghe thuyết minh" → narration bắt đầu trong vòng 1-2 giây
-- [ ] Đang nghe quán A, tap nghe quán B → âm thanh quán A dừng lập tức (Single Voice Rule)
-- [ ] Dừng app / thoát màn hình → player ngừng nếu cần thiết
+## 3. Performance Criteria
 
-**QR Code:**
-- [ ] Quét QR code tại quán → mở narration đúng nội dung
-- [ ] QR code không hợp lệ → thông báo lỗi user-friendly, không crash
-- [ ] QR Mode hoạt động khi offline (POI data đã sync)
+1. Tap response, audio start, and sync metrics satisfy defined SLA targets.
+2. Offline startup remains within target on representative devices.
+3. Memory and battery behavior remain within accepted range.
 
-**Language & Playback:**
-- [ ] Chuyển ngôn ngữ → narration tiếp theo dùng ngôn ngữ mới
-- [ ] Nút Play/Pause/Stop trên Mini Player hoạt động đúng
-- [ ] Trả về tiếng Anh nếu thiết bị không hỗ trợ ngôn ngữ được chọn
+## 4. Release Gate Criteria
 
-**Offline Functionality:**
-- [ ] Sau sync lần đầu, tắt internet → app vẫn hiển thị POI, map, nội dung đầy đủ
-- [ ] Offline → không crash, hiển thị cấu hình Offline
-- [ ] Reconnect internet → tự động kiểm tra version update
+1. Zero open P0 issues in execution tracker.
+2. Auth, sync manifest, full sync, and state machine acceptance checks are PASS.
+3. Security checks for payment callback and token handling are complete for release scope.
 
-**Khám phá Tuyến phố:**
-- [ ] Danh sách các tuyến ẩm thực load từ SQLite khi offline
-- [ ] Tuyến detail hiển thị danh sách các quán ăn theo thứ tự
-- [ ] "Xem trên bản đồ" → Lọc các quán trên bản đồ
+## 5. Business Outcome Criteria
 
-### 16.2 Testing Requirements
-
-**Manual Testing Scenarios:**
-
-| Scenario | Test Method | Expected Result |
-|----------|------------|----------------|
-| Map Tap Playback | Tap 1 quán rồi tap liền quán khác | Áp dụng đúng Single Voice Rule |
-| Foreground GPS | Đi dạo trên phố | Chấm xanh cập nhật đúng vị trí mà pin không sụt nhanh |
-| TTS Language Switch | Chuyển VI → EN → ZH | Voice đổi ngay narration tiếp theo |
-| Offline Mode | Airplane mode sau sync | Full functionality retained |
-| QR Scan | Dùng mã QR thật tại quán | Narration đúng POI |
-| Payment Flow | Test VNPay sandbox | Token nhận được, redirect đúng |
-| Claim Code | Valid và invalid codes | Correct success/error states |
-
-**Automated Testing Targets:**
-
-- Unit test Narration State Machine (Play/Pause/Stop/Switch)
-- Unit test Claim Code validation logic
-- Integration test Sync flow (manifest → SQLite write)
-- E2E test (Detox): Auth flow, Language selection, QR scan mock
-
-### 16.3 Performance Benchmarks
-
-| Metric | Minimum | Target |
-|--------|---------|--------|
-| App cold start time | < 5s | < 3s |
-| Tap opening bottom sheet latency | < 500ms | < 100ms |
-| Initial sync duration (standard dataset) | < 60s | < 30s |
-| SQLite query for POI list | < 500ms | < 200ms |
-| TTS speech start latency | < 2s | < 1s |
-
-### 16.4 Go-Live Criteria
-
-1. **Zero P0 bugs** tại thời điểm launch
-2. **Core flow** pass 100% manual test
-3. **Performance benchmarks** đạt Target trên thiết bị mục tiêu (mid-range 2022)
-4. **Beta test** với 10 khách thật tại Thực địa phố ẩm thực: satisfaction ≥ 4/5
+1. Users can discover and play narration with minimal onboarding friction.
+2. International users can complete end-to-end flow in selected language.
+3. Admin can publish and deliver content updates reliably.
