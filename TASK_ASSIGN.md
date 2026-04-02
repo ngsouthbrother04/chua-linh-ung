@@ -51,15 +51,22 @@ Ghi chú: trạng thái này đã được đồng bộ với tracker canonical 
 
 Phân bổ SP: `21 / 21 / 20 / 21` (độ lệch nhỏ, chấp nhận được).
 
-## 3.1 Bổ sung việc còn thiếu cần theo dõi (không đổi role)
+## 3.1 Phân bổ nhiệm vụ Backend bổ sung (API còn thiếu)
 
-Các đầu việc dưới đây là phần đã bổ sung vào tài liệu API/test và cần được thực thi nhất quán theo nhánh phụ trách hiện tại:
+Dựa trên soát xét đối chiếu với PRD và Backend Design, một lượng lớn các API vẫn chưa được code. Tiến hành phân công cụ thể cho 2 owner Backend để xử lý dứt điểm:
 
-1. **Auth lifecycle API**: `POST /api/v1/auth/token-refresh`, `POST /api/v1/auth/logout`.
-2. **Sync delta API**: `POST /api/v1/sync/incremental` + fallback `GET /api/v1/sync/full` khi vượt delta window.
-3. **Public content API completeness**: `GET /api/v1/pois`, `GET /api/v1/pois/:id`, `POST /api/v1/pois/search/radius`, `GET /api/v1/tours`, `GET /api/v1/tours/:id`.
-4. **Analytics heartbeat**: `POST /api/v1/analytics/presence/heartbeat` với semantics `online_now`/`active_5m`.
-5. **Test completeness**: thực thi và ghi nhận kết quả TC-18.1 -> TC-18.8 trong `docs/test_scenarios.md` trước khi đóng ISSUE-013.
+**A. Người 1 (Nhánh `3122410411`) phụ trách:**
+
+1. **Sync delta API**: `POST /api/v1/sync/incremental` + fallback `/sync/full` khi vượt delta window.
+2. **Public content API**: `GET /api/v1/pois`, `GET /api/v1/pois/:id`, `POST /api/v1/pois/search/radius`, `GET /api/v1/tours`, `GET /api/v1/tours/:id`.
+3. **Analytics API**: `POST /api/v1/analytics/events`, `POST /api/v1/analytics/presence/heartbeat` (`online_now`/`active_5m`), và `GET /api/v1/analytics/stats`.
+4. **Test completeness**: Mở rộng và pass toàn bộ TC-18.1 -> TC-18.8 trong `docs/test_scenarios.md`.
+
+**B. Người 4 (Nhánh `3122560001`) phụ trách:**
+
+1. **Auth lifecycle API**: Bổ sung nốt `POST /api/v1/auth/token-refresh`, `POST /api/v1/auth/logout`.
+2. **Admin CMS API (CRUD)**: `POST/GET/PUT/DELETE /api/v1/admin/pois...` và `/api/v1/admin/tours...`
+3. **Admin Actions**: `POST /api/v1/admin/pois/:id/publish` và `POST /api/v1/admin/sync/invalidate`.
 
 ## 4. Kế hoạch chạy theo Sprint để giảm block
 
