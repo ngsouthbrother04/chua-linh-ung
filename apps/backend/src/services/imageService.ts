@@ -120,6 +120,26 @@ async function cleanupOldCloudinaryImage(oldImageUrl: string | null | undefined,
   }
 }
 
+export async function removeCloudinaryImageByUrl(imageUrl: string | null | undefined): Promise<boolean> {
+  if (!imageUrl) {
+    return false;
+  }
+
+  ensureCloudinaryConfig();
+
+  const publicId = extractCloudinaryPublicId(imageUrl);
+  if (!publicId) {
+    return false;
+  }
+
+  await cloudinary.uploader.destroy(publicId, {
+    resource_type: 'image',
+    invalidate: true
+  });
+
+  return true;
+}
+
 function uploadImageBufferToCloudinary(
   entityId: string,
   entity: 'poi' | 'tour',

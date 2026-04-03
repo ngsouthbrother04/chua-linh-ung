@@ -84,7 +84,7 @@ Language selection (canonical): query param `?language=vi`
 | `/auth/claim`            | POST   | Xác thực mã claim/voucher          | ❌   |
 | `/auth/payment/initiate` | POST   | Khởi tạo thanh toán                | ❌   |
 | `/auth/payment/callback` | POST   | Xử lý callback/finalize thanh toán | ❌   |
-| `/auth/token-refresh`    | POST   | Làm mới JWT Token                  | ✅   |
+| `/auth/token-refresh`    | POST   | Làm mới JWT Token                  | ❌   |
 | `/auth/logout`           | POST   | Đăng xuất                          | ✅   |
 
 **Request/Response ví dụ**:
@@ -396,6 +396,13 @@ Mục này chuẩn hoa mau response cho tung endpoint theo cac truong hop pho bi
 **POST `/auth/token-refresh`**
 
 ```json
+// Request (canonical for this project)
+{
+  "refreshToken": "<refresh_jwt_token>"
+}
+```
+
+```json
 // 200 - Refresh token thanh cong
 {
   "status": "success",
@@ -416,7 +423,16 @@ Mục này chuẩn hoa mau response cho tung endpoint theo cac truong hop pho bi
 }
 ```
 
+Ghi chú triển khai đồ án:
+- `token-refresh` chỉ nhận `refreshToken` trong body JSON.
+- Không dùng `Authorization` header cho endpoint này để tránh mơ hồ contract.
+
 **POST `/auth/logout`**
+
+```text
+Request header (canonical):
+Authorization: Bearer <access_jwt_token>
+```
 
 ```json
 // 200 - Dang xuat thanh cong
@@ -435,6 +451,10 @@ Mục này chuẩn hoa mau response cho tung endpoint theo cac truong hop pho bi
   }
 }
 ```
+
+Ghi chú triển khai đồ án:
+- Logout đánh dấu access token hiện tại là không hợp lệ trong runtime process (in-memory invalidation).
+- Mục tiêu là rõ ràng hành vi cho scope môn học, không tối ưu phân tán nhiều instance.
 
 #### B. Synchronization (Offline-First)
 
@@ -1148,6 +1168,9 @@ jobs:
 - ✅ Log tất cả admin actions
 - ✅ Analytics data anonymization (remove PII)
 - ✅ Regular security audit
+- ✅ Soft delete policy: record stays hidden from sync/mobile immediately, then cleanup job may remove physical media after retention window.
+- ✅ Audit trail must record actor, action, timestamp, and reason for POI delete/publish changes.
+- ✅ Retention/cleanup owner: backend maintains policy; product/admin defines retention window and audit requirements.
 
 ---
 

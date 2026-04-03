@@ -3,6 +3,8 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import syncRouter from '../src/routes/api/sync';
 import { errorHandlingMiddleware, notFoundMiddleware } from '../src/middlewares/errorHandlingMiddleware';
+import { getSyncFull, getSyncManifest } from '../src/services/syncService';
+import { isAccessTokenSessionActive, verifyJwt } from '../src/services/authService';
 
 vi.mock('../src/services/syncService', () => ({
   getSyncManifest: vi.fn(),
@@ -10,11 +12,9 @@ vi.mock('../src/services/syncService', () => ({
 }));
 
 vi.mock('../src/services/authService', () => ({
-  verifyJwt: vi.fn()
+  verifyJwt: vi.fn(),
+  isAccessTokenSessionActive: vi.fn()
 }));
-
-import { getSyncFull, getSyncManifest } from '../src/services/syncService';
-import { verifyJwt } from '../src/services/authService';
 
 function createApp() {
   const app = express();
@@ -29,6 +29,7 @@ describe('SYNC routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(verifyJwt).mockReturnValue({ sub: 'user-id' });
+    vi.mocked(isAccessTokenSessionActive).mockResolvedValue(true);
   });
 
   it('GET /api/v1/sync/manifest should return manifest payload', async () => {

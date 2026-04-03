@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import crypto from 'crypto';
 import express from 'express';
 import request from 'supertest';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -6,7 +7,7 @@ import prisma from '../src/lib/prisma';
 import syncRouter from '../src/routes/api/sync';
 import { errorHandlingMiddleware, notFoundMiddleware } from '../src/middlewares/errorHandlingMiddleware';
 import { buildSeedDataset } from '../src/services/seedService';
-import { createAuthToken } from '../src/services/authService';
+import { createAuthToken, verifyJwt } from '../src/services/authService';
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
 const describeIfDb = hasDatabaseUrl ? describe : describe.skip;
@@ -18,6 +19,23 @@ function createApp() {
   app.use(notFoundMiddleware);
   app.use(errorHandlingMiddleware);
   return app;
+}
+
+async function seedActiveSession(token: string, deviceId: string): Promise<{ sessionId: string }> {
+  const payload = verifyJwt(token);
+  const sessionId = crypto.randomUUID();
+
+  await prisma.authSession.create({
+    data: {
+      id: sessionId,
+      deviceId,
+      refreshTokenHash: crypto.createHash('sha256').update(`${token}:${deviceId}`).digest('hex'),
+      accessTokenJti: typeof payload.jti === 'string' ? payload.jti : null,
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000)
+    }
+  });
+
+  return { sessionId };
 }
 
 describeIfDb('SYNC integration with real Prisma', () => {
@@ -38,6 +56,8 @@ describeIfDb('SYNC integration with real Prisma', () => {
           longitude: poi.longitude,
           type: poi.type,
           image: poi.image,
+          isPublished: true,
+          publishedAt: new Date('2026-03-25T00:00:00Z'),
           contentVersion: poi.contentVersion
         },
         create: {
@@ -49,6 +69,8 @@ describeIfDb('SYNC integration with real Prisma', () => {
           longitude: poi.longitude,
           type: poi.type,
           image: poi.image,
+          isPublished: true,
+          publishedAt: new Date('2026-03-25T00:00:00Z'),
           contentVersion: poi.contentVersion
         }
       });
@@ -63,6 +85,8 @@ describeIfDb('SYNC integration with real Prisma', () => {
           duration: tour.duration,
           poiIds: tour.poiIds,
           image: tour.image,
+          isPublished: true,
+          publishedAt: new Date('2026-03-25T00:00:00Z'),
           contentVersion: tour.contentVersion
         },
         create: {
@@ -72,6 +96,8 @@ describeIfDb('SYNC integration with real Prisma', () => {
           duration: tour.duration,
           poiIds: tour.poiIds,
           image: tour.image,
+          isPublished: true,
+          publishedAt: new Date('2026-03-25T00:00:00Z'),
           contentVersion: tour.contentVersion
         }
       });
@@ -99,38 +125,44 @@ describeIfDb('SYNC integration with real Prisma', () => {
     const app = createApp();
 
     const { token } = createAuthToken('integration-test');
-    
-    const res = await request(app)
-      .get('/api/v1/sync/full?version=0')
-      .set('Authorization', `Bearer ${token}`);
+    const deviceId = `sync-integration-${Date.now()}`;
+    const { sessionId } = await seedActiveSession(token, deviceId);
 
-    expect(res.status).toBe(200);
-    expect(res.body.contentVersion).toBeGreaterThanOrEqual(contentVersion);
+    try {
+      const res = await request(app)
+        .get('/api/v1/sync/full?version=0')
+        .set('Authorization', `Bearer ${token}`);
 
-    const poiById = new Map<string, any>(res.body.pois.map((poi: any) => [poi.id, poi]));
-    const tourById = new Map<string, any>(res.body.tours.map((tour: any) => [tour.id, tour]));
+      expect(res.status).toBe(200);
+      expect(res.body.contentVersion).toBeGreaterThanOrEqual(contentVersion);
 
-    for (const seededPoi of dataset.pois) {
-      const poi = poiById.get(seededPoi.id);
-      expect(poi).toBeDefined();
-      expect(poi.name).toEqual(seededPoi.name);
-      expect(poi.description).toEqual(seededPoi.description);
-      expect(poi.audioUrls).toEqual(seededPoi.audioUrls);
-      expect(poi.type).toBe(seededPoi.type);
-      expect(poi.image).toBe(seededPoi.image);
-      expect(poi.latitude).toBeCloseTo(Number(seededPoi.latitude), 6);
-      expect(poi.longitude).toBeCloseTo(Number(seededPoi.longitude), 6);
-    }
+      const poiById = new Map<string, any>(res.body.pois.map((poi: any) => [poi.id, poi]));
+      const tourById = new Map<string, any>(res.body.tours.map((tour: any) => [tour.id, tour]));
 
-    for (const seededTour of dataset.tours) {
-      const tour = tourById.get(seededTour.id);
-      expect(tour).toBeDefined();
-      expect(tour.name).toEqual(seededTour.name);
-      expect(tour.description).toEqual(seededTour.description);
-      expect(tour.duration).toBe(seededTour.duration);
-      expect(tour.image).toBe(seededTour.image);
-      expect(tour.poiIds).toEqual(seededTour.poiIds);
-      expect(typeof tour.createdAt).toBe('string');
+      for (const seededPoi of dataset.pois) {
+        const poi = poiById.get(seededPoi.id);
+        expect(poi).toBeDefined();
+        expect(poi.name).toEqual(seededPoi.name);
+        expect(poi.description).toEqual(seededPoi.description);
+        expect(poi.audioUrls).toEqual(seededPoi.audioUrls);
+        expect(poi.type).toBe(seededPoi.type);
+        expect(poi.image).toBe(seededPoi.image);
+        expect(poi.latitude).toBeCloseTo(Number(seededPoi.latitude), 6);
+        expect(poi.longitude).toBeCloseTo(Number(seededPoi.longitude), 6);
+      }
+
+      for (const seededTour of dataset.tours) {
+        const tour = tourById.get(seededTour.id);
+        expect(tour).toBeDefined();
+        expect(tour.name).toEqual(seededTour.name);
+        expect(tour.description).toEqual(seededTour.description);
+        expect(tour.duration).toBe(seededTour.duration);
+        expect(tour.image).toBe(seededTour.image);
+        expect(tour.poiIds).toEqual(seededTour.poiIds);
+        expect(typeof tour.createdAt).toBe('string');
+      }
+    } finally {
+      await prisma.authSession.deleteMany({ where: { id: sessionId } });
     }
   });
 
@@ -142,15 +174,21 @@ describeIfDb('SYNC integration with real Prisma', () => {
 
     const currentVersion = manifestRes.body.contentVersion;
     const { token } = createAuthToken('integration-test');
-    
-    const fullRes = await request(app)
-      .get(`/api/v1/sync/full?version=${currentVersion}`)
-      .set('Authorization', `Bearer ${token}`);
+    const deviceId = `sync-integration-${Date.now()}-current`;
+    const { sessionId } = await seedActiveSession(token, deviceId);
 
-    expect(fullRes.status).toBe(200);
-    expect(fullRes.body.contentVersion).toBe(currentVersion);
-    expect(fullRes.body.needsSync).toBe(false);
-    expect(fullRes.body.pois).toEqual([]);
-    expect(fullRes.body.tours).toEqual([]);
+    try {
+      const fullRes = await request(app)
+        .get(`/api/v1/sync/full?version=${currentVersion}`)
+        .set('Authorization', `Bearer ${token}`);
+
+      expect(fullRes.status).toBe(200);
+      expect(fullRes.body.contentVersion).toBe(currentVersion);
+      expect(fullRes.body.needsSync).toBe(false);
+      expect(fullRes.body.pois).toEqual([]);
+      expect(fullRes.body.tours).toEqual([]);
+    } finally {
+      await prisma.authSession.deleteMany({ where: { id: sessionId } });
+    }
   });
 });

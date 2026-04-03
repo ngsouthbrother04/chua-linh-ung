@@ -53,6 +53,8 @@ Priority: P0
 Scope: Add/align auth API contracts for claim + payment initiate + payment callback/finalize + token-refresh + logout with validation and error contract.
 Acceptance mapping: UC1, TC-1.1 ~ TC-1.5
 
+Completion note: `POST /api/v1/auth/token-refresh` and `POST /api/v1/auth/logout` are implemented and covered by backend route tests.
+
 ### ISSUE-003 - Backend TTS Processing (Piper Offline)
 
 Status: DONE
@@ -170,6 +172,29 @@ Priority: P1
 Scope: Implement JWT key rotation strategy (kid header, multi-secret support) and strict auth middleware to secure API endpoints. Include tests for expired/invalid signatures.
 Target files: apps/backend/src/services/authService.ts, apps/backend/src/middlewares/authMiddleware.ts, apps/backend/tests/jwt-rotation.test.ts
 
+### ISSUE-016 - Soft Delete Retention & Audit Policy Execution
+
+Status: DONE
+Priority: P1
+Scope: Operationalize soft-delete policy for POI lifecycle: define retention window, assign cleanup owner, and enforce audit trail contract for delete/publish actions.
+Acceptance mapping: docs/prd/15_admin_requirements.md §6, docs/backend_design.md §8.3
+Target files: apps/backend/src/services/poiAdminService.ts, apps/backend/src/services/imageService.ts, docs/backend_design.md, docs/prd/15_admin_requirements.md, docs/test_scenarios.md
+Deliverables:
+
+1. Add explicit retention config and scheduled/manual cleanup flow for soft-deleted POIs.
+2. Ensure cleanup covers media artifacts (audio local files + stale image assets where applicable).
+3. Define and document audit fields for high-impact admin operations (actor, action, reason, timestamp).
+4. Add tests for retention cleanup behavior and audit log write path.
+
+Completion note:
+
+1. Added manual cleanup endpoint `POST /api/v1/admin/maintenance/pois/soft-delete-cleanup` with dry-run support.
+2. Added optional scheduler bootstrap for retention cleanup via env flags.
+3. Added structured admin audit events for POI create/update/publish/soft-delete and retention purge.
+4. Added media cleanup integration: local audio cleanup + Cloudinary delete by URL during retention purge.
+5. Added/updated tests: `tests/poiAdminService.test.ts`, `tests/admin.routes.test.ts`, `tests/tts.service.test.ts` (31/31 focused tests pass).
+6. Added DB integration coverage for retention cleanup endpoint: `tests/admin.maintenance.integration.test.ts` (2/2 pass).
+
 ## Current blockers snapshot
 
 1. Mobile dependencies required by canonical spec are not installed yet.
@@ -190,6 +215,7 @@ Release scope:
 - SYNC-01: sync manifest endpoint.
 - SYNC-02: full sync endpoint.
 - Runtime hardening: gzip compression + centralized API error handling.
+- Admin maintenance hardening: soft-delete retention cleanup + audit trail (ISSUE-016).
 - Validation: backend unit tests and TypeScript build.
 
 ### AC mapping
@@ -205,6 +231,8 @@ Release scope:
 | CORE-01 - Schema/config merge conflict management | PASS | `git diff --name-status origin/main...3122560001 -- apps/backend/prisma/schema.prisma apps/backend/package.json apps/backend/tsconfig.json apps/backend/src/index.ts` | No divergence on conflict-sensitive files; branch conflict risk for backend core schema/config is currently clear |
 | Error handling utility integration | PASS | ApiError + async handler + global/not-found middleware in backend | Tests in `apps/backend/tests/error-handling.middleware.test.ts` |
 | Gzip response compression | PASS | `compression` middleware enabled in backend bootstrap | Configured with threshold `0` |
+| ISSUE-016 - Soft delete retention & audit policy execution | PASS | `POST /api/v1/admin/maintenance/pois/soft-delete-cleanup` + scheduler hook + audit logs + tests (`admin.maintenance.integration.test.ts`) | Branch owner: `3122560001`; includes dry-run and execute paths |
+| Admin tour CRUD DB integration coverage | PASS | `apps/backend/tests/admin.tours.integration.test.ts` | Covers create, read, update, and soft delete lifecycle against Prisma DB |
 | Regression check - tests and build | PASS | `npm test` => 22/22 passed; `npm run build` => success | Re-run confirmed green on 2026-03-25 |
 
 ### Residual risks

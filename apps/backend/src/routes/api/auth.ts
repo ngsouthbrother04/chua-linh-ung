@@ -1,13 +1,27 @@
 import { Router } from 'express';
 import crypto from 'crypto';
 import { PaymentProvider } from '../../generated/prisma/client';
-import { claimAccess, finalizePayment, initiatePayment } from '../../services/authService';
+import {
+  claimAccess,
+  finalizePayment,
+  initiatePayment,
+  refreshAuthSession,
+  revokeAuthSessionByAccessToken
+} from '../../services/authService';
 import { verifyVNPaySignature, verifyMoMoSignature } from '../../utils/paymentVerifier';
 import asyncHandler from '../../utils/asyncHandler';
 import ApiError from '../../utils/ApiError';
 
 const router = Router();
 const CALLBACK_TTL_SECONDS = Number(process.env.PAYMENT_CALLBACK_MAX_AGE_SECONDS ?? 300);
+
+function extractBearerToken(headerValue: unknown): string {
+  if (typeof headerValue !== 'string' || !headerValue.startsWith('Bearer ')) {
+    return '';
+  }
+
+  return headerValue.slice('Bearer '.length).trim();
+}
 
 function verifyCallbackSignature(params: {
   transactionId: string;
@@ -56,6 +70,27 @@ router.post(
 );
 
 router.post(
+  '/token-refresh',
+  asyncHandler(async (req, res) => {
+    const refreshTokenRaw = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '';
+
+    if (!refreshTokenRaw) {
+      throw new ApiError(401, 'Refresh token khong hop le hoac da het han.');
+    }
+
+    try {
+      const refreshed = await refreshAuthSession(refreshTokenRaw);
+      return res.status(200).json({
+        message: 'Làm mới phiên đăng nhập thành công.',
+        ...refreshed
+      });
+    } catch {
+      throw new ApiError(401, 'Refresh token khong hop le hoac da het han.');
+    }
+  })
+);
+
+router.post(
   '/payment/initiate',
   asyncHandler(async (req, res) => {
   const providerRaw =
@@ -93,6 +128,26 @@ router.post(
     ...payment
   });
 })
+);
+
+router.post(
+  '/logout',
+  asyncHandler(async (req, res) => {
+    const accessToken = extractBearerToken(req.headers.authorization) || (typeof req.body?.token === 'string' ? req.body.token : '');
+
+    if (!accessToken) {
+      throw new ApiError(401, 'Thiếu hoặc sai định dạng Authorization Bearer token.');
+    }
+
+    try {
+      await revokeAuthSessionByAccessToken(accessToken);
+      return res.status(200).json({
+        message: 'Dang xuat thanh cong'
+      });
+    } catch {
+      throw new ApiError(401, 'Token khong hop le hoac da het han.');
+    }
+  })
 );
 
 router.post(

@@ -10,6 +10,7 @@ import adminRouter from './routes/api/admin';
 import prisma from './lib/prisma';
 import { errorHandlingMiddleware, notFoundMiddleware } from './middlewares/errorHandlingMiddleware';
 import { initializeTtsWorker, validateTtsRuntimeConfig } from './services/ttsService';
+import { initializePoiSoftDeleteCleanupScheduler } from './services/poiAdminService';
 
 dotenv.config();
 
@@ -64,6 +65,11 @@ app.listen(PORT, async () => {
 
     await initializeTtsWorker();
     console.log('TTS worker initialized');
+
+    const cleanupTimer = initializePoiSoftDeleteCleanupScheduler();
+    if (cleanupTimer) {
+      console.log('POI soft-delete cleanup scheduler initialized');
+    }
   } catch (error) {
     console.error('Database connection failed:', error);
   }

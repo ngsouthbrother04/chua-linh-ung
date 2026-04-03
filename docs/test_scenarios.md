@@ -758,7 +758,7 @@ Rule: mỗi UC có đúng 1 AC chính và đúng 1 test gate chính để pass/f
 | ------------------- | ---------------------------------------------------------- |
 | **Test Case ID**    | TC-18.1                                                    |
 | **Title**           | Refresh access token with valid refresh token              |
-| **Steps**           | 1. Call `POST /api/v1/auth/token-refresh` with valid token |
+| **Steps**           | 1. Call `POST /api/v1/auth/token-refresh` with valid `refreshToken` in request body |
 | **Expected Result** | ✅ Returns new `authToken` and `expiresIn`                 |
 | **Status**          | ⬜ Not Run                                                 |
 
@@ -768,7 +768,7 @@ Rule: mỗi UC có đúng 1 AC chính và đúng 1 test gate chính để pass/f
 | ------------------- | -------------------------------------------------------------------- |
 | **Test Case ID**    | TC-18.2                                                              |
 | **Title**           | Reject expired or invalid refresh token                              |
-| **Steps**           | 1. Call `POST /api/v1/auth/token-refresh` with expired/invalid token |
+| **Steps**           | 1. Call `POST /api/v1/auth/token-refresh` with expired/invalid `refreshToken` in request body |
 | **Expected Result** | ❌ Returns 401 with stable error code                                |
 | **Status**          | ⬜ Not Run                                                           |
 

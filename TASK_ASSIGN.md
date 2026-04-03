@@ -23,7 +23,7 @@ Nguyên tắc:
 - Người 3: nhánh `3122410466` (Web FE)
 - Người 4: nhánh `3122560001` (Backend)
 
-## 2.1 Cập nhật trạng thái hoàn thành (2026-03-26)
+## 2.1 Cập nhật trạng thái hoàn thành (2026-04-03)
 
 - ISSUE-001: ĐÃ HOÀN THÀNH
 - ISSUE-002: ĐÃ HOÀN THÀNH
@@ -31,6 +31,7 @@ Nguyên tắc:
 - ISSUE-003B: ĐÃ HOÀN THÀNH
 - ISSUE-014: ĐÃ HOÀN THÀNH
 - ISSUE-015: ĐÃ HOÀN THÀNH
+- ISSUE-016: ĐÃ HOÀN THÀNH
 
 Ghi chú: trạng thái này đã được đồng bộ với tracker canonical tại `EXECUTION_TODO_ISSUES.md`.
 
@@ -41,7 +42,7 @@ Ghi chú: trạng thái này đã được đồng bộ với tracker canonical 
 | `3122410411` | Người 1 (Backend) | ISSUE-003, ISSUE-003B, ISSUE-013 | 21 | Backend TTS + sync contract + integration gate (API/auth/sync/offline), gồm test API completeness TC-18.x |
 | `3122410452` | Người 2 (Mobile) | ISSUE-004, ISSUE-005, ISSUE-006, ISSUE-008 | 21 | Mobile runtime: app shell, SQLite, sync bootstrap, State Machine |
 | `3122410466` | Người 3 (Web FE) | ISSUE-007, ISSUE-009, ISSUE-010, ISSUE-011, ISSUE-012 | 20 | FE flows: map/QR/language-playback/tour + quality gate UI behavior |
-| `3122560001` | Người 4 (Backend) | ISSUE-001, ISSUE-002, ISSUE-014, ISSUE-015 | 21 | Backend bootstrap + auth/payment API + security hardening (webhook verifier, JWT rotation) |
+| `3122560001` | Người 4 (Backend) | ISSUE-001, ISSUE-002, ISSUE-014, ISSUE-015, ISSUE-016 | 21 | Backend bootstrap + auth/payment API + security hardening + soft-delete retention/audit cleanup |
 
 ### Ghi chú điều phối an toàn (2026-03-26)
 
@@ -64,9 +65,19 @@ Dựa trên soát xét đối chiếu với PRD và Backend Design, một lượ
 
 **B. Người 4 (Nhánh `3122560001`) phụ trách:**
 
-1. **Auth lifecycle API**: Bổ sung nốt `POST /api/v1/auth/token-refresh`, `POST /api/v1/auth/logout`.
-2. **Admin CMS API (CRUD)**: `POST/GET/PUT/DELETE /api/v1/admin/pois...` và `/api/v1/admin/tours...`
-3. **Admin Actions**: `POST /api/v1/admin/pois/:id/publish` và `POST /api/v1/admin/sync/invalidate`.
+1. **Auth lifecycle API**: ĐÃ HOÀN THÀNH `POST /api/v1/auth/token-refresh`, `POST /api/v1/auth/logout`.
+2. **Admin CMS API (CRUD)**: ĐÃ HOÀN THÀNH `POST/GET/PUT/DELETE /api/v1/admin/pois...` và `/api/v1/admin/tours...`.
+3. **Admin Actions**: ĐÃ HOÀN THÀNH `POST /api/v1/admin/pois/:id/publish` và `POST /api/v1/admin/sync/invalidate`.
+4. **Soft Delete Retention & Audit (ISSUE-016)**: ĐÃ HOÀN THÀNH endpoint maintenance cleanup, scheduler tùy chọn, media cleanup, audit trail, và integration test DB.
+
+## 3.2 Các task đã làm đạt thuộc nhánh `3122560001`
+
+1. ISSUE-001: Backend bootstrap hardening.
+2. ISSUE-002: Auth + payment API (kèm token-refresh/logout contract).
+3. ISSUE-014: Payment callback hardening và integration tests.
+4. ISSUE-015: JWT key rotation + auth middleware security checks.
+5. ISSUE-016: Soft-delete retention cleanup + audit trail + test coverage (unit/route/integration).
+6. Admin Tour CRUD DB integration coverage: create/read/update/soft-delete lifecycle verified in `apps/backend/tests/admin.tours.integration.test.ts`.
 
 ## 4. Kế hoạch chạy theo Sprint để giảm block
 

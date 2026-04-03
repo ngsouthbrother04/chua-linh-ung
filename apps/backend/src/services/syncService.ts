@@ -50,8 +50,13 @@ function stableJson(value: unknown): string {
 }
 
 export async function getSyncManifest(): Promise<SyncManifestResult> {
-  const [pois, tours, poiAggregate, tourAggregate] = await Promise.all([
+  const [settings, pois, tours, poiAggregate, tourAggregate] = await Promise.all([
+    prisma.appSetting.findUnique({
+      where: { id: 1 },
+      select: { currentVersion: true }
+    }),
     prisma.pointOfInterest.findMany({
+      where: { deletedAt: null, isPublished: true },
       orderBy: { id: 'asc' },
       select: {
         id: true,
@@ -67,6 +72,7 @@ export async function getSyncManifest(): Promise<SyncManifestResult> {
       }
     }),
     prisma.tour.findMany({
+      where: { deletedAt: null, isPublished: true },
       orderBy: { id: 'asc' },
       select: {
         id: true,
@@ -95,7 +101,7 @@ export async function getSyncManifest(): Promise<SyncManifestResult> {
 
   const totalPois = pois.length;
   const totalTours = tours.length;
-  const contentVersion = Math.max(poiAggregate._max.contentVersion ?? 0, tourAggregate._max.contentVersion ?? 0);
+  const contentVersion = Math.max(settings?.currentVersion ?? 0, poiAggregate._max.contentVersion ?? 0, tourAggregate._max.contentVersion ?? 0);
 
   const poiUpdatedAtMs = poiAggregate._max.updatedAt?.getTime() ?? 0;
   const tourUpdatedAtMs = tourAggregate._max.updatedAt?.getTime() ?? 0;
@@ -134,8 +140,13 @@ export async function getSyncManifest(): Promise<SyncManifestResult> {
 }
 
 export async function getSyncFull(): Promise<SyncFullResult> {
-  const [pois, tours] = await Promise.all([
+  const [settings, pois, tours, poiAggregate, tourAggregate] = await Promise.all([
+    prisma.appSetting.findUnique({
+      where: { id: 1 },
+      select: { currentVersion: true }
+    }),
     prisma.pointOfInterest.findMany({
+      where: { deletedAt: null, isPublished: true },
       orderBy: { id: 'asc' },
       select: {
         id: true,
@@ -150,6 +161,7 @@ export async function getSyncFull(): Promise<SyncFullResult> {
       }
     }),
     prisma.tour.findMany({
+      where: { deletedAt: null, isPublished: true },
       orderBy: { id: 'asc' },
       select: {
         id: true,
@@ -161,14 +173,20 @@ export async function getSyncFull(): Promise<SyncFullResult> {
         contentVersion: true,
         createdAt: true
       }
+    }),
+    prisma.pointOfInterest.aggregate({
+      _max: {
+        contentVersion: true
+      }
+    }),
+    prisma.tour.aggregate({
+      _max: {
+        contentVersion: true
+      }
     })
   ]);
 
-  const contentVersion = Math.max(
-    ...pois.map((poi) => poi.contentVersion),
-    ...tours.map((tour) => tour.contentVersion),
-    0
-  );
+  const contentVersion = Math.max(settings?.currentVersion ?? 0, poiAggregate._max.contentVersion ?? 0, tourAggregate._max.contentVersion ?? 0);
 
   return {
     contentVersion,

@@ -55,6 +55,8 @@ async function main() {
           longitude: poi.longitude,
           type: poi.type,
           image: poi.image,
+          isPublished: true,
+          publishedAt: new Date(),
           contentVersion: poi.contentVersion,
         },
         create: {
@@ -66,6 +68,8 @@ async function main() {
           longitude: poi.longitude,
           type: poi.type,
           image: poi.image,
+          isPublished: true,
+          publishedAt: new Date(),
           contentVersion: poi.contentVersion,
         },
       });
@@ -80,6 +84,8 @@ async function main() {
           duration: tour.duration,
           poiIds: tour.poiIds,
           image: tour.image,
+          isPublished: true,
+          publishedAt: new Date(),
           contentVersion: tour.contentVersion,
         },
         create: {
@@ -89,6 +95,8 @@ async function main() {
           duration: tour.duration,
           poiIds: tour.poiIds,
           image: tour.image,
+          isPublished: true,
+          publishedAt: new Date(),
           contentVersion: tour.contentVersion,
         },
       });

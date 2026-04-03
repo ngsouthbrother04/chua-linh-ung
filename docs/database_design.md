@@ -55,7 +55,7 @@
 | `analytics_events` | Sự kiện phát audio, tap, etc | 10K-100K/day |
 | `payment_transactions` | Lịch sử thanh toán | 10-100/day |
 | `payment_callback_events` | Webhook từ VNPay/Momo | 10-100/day |
-| `auth_sessions` | Refresh token/session lifecycle | 100-1000 |
+| `auth_sessions` | Optional table for refresh/session lifecycle (future hardening) | 100-1000 |
 | `app_settings` | Cấu hình toàn hệ thống | <10 |
 | `sync_change_logs` | Nguồn dữ liệu cho incremental sync | 1K-100K/day |
 | `analytics_presence` | Presence window cho online_now/active_5m | 100-10K |
@@ -253,7 +253,11 @@ CREATE INDEX idx_users_active ON users(is_active);
 
 #### **Table: auth_sessions**
 
-**Mục đích**: Quản lý refresh token, revoke/logout, và vòng đời session
+**Mục đích**: Bảng mở rộng cho hardening refresh token/revoke session.
+
+**Ghi chú scope đồ án hiện tại**:
+- Runtime auth lifecycle đang triển khai theo hướng đơn giản (JWT refresh token + in-memory access token invalidation khi logout).
+- `auth_sessions` được giữ trong schema để sẵn sàng nâng cấp sau này, không phải dependency bắt buộc của flow hiện tại.
 
 ```sql
 CREATE TABLE auth_sessions (

@@ -9,6 +9,9 @@ export interface ClaimAuthResult {
   expiresIn: number;
   method: 'claim_code';
   deviceId?: string;
+  refreshToken: string;
+  refreshExpiresIn: number;
+  sessionId: string;
 }
 
 export interface PaymentInitiateInput {
@@ -46,17 +49,33 @@ export interface PaymentFinalizeResult {
   token?: string;
   expiresIn?: number;
   deviceId?: string;
+  refreshToken?: string;
+  refreshExpiresIn?: number;
+  sessionId?: string;
+}
+
+export interface RefreshAuthResult {
+  token: string;
+  accessToken: string;
+  tokenType: 'Bearer';
+  expiresIn: number;
+  refreshToken: string;
+  refreshExpiresIn: number;
+  deviceId?: string;
+  sessionId: string;
 }
 
 const DEFAULT_CLAIM_CODES = ['ABC123', 'FOODIE2026', 'LINHUNGVIP'];
 
 const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL_SECONDS ?? 24 * 60 * 60);
+const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS ?? 30 * 24 * 60 * 60);
 
 const TOKEN_SECRET = process.env.AUTH_JWT_SECRET ?? 'dev-only-auth-secret-change-me';
 const TOKEN_SECRETS = process.env.AUTH_JWT_SECRETS
   ? process.env.AUTH_JWT_SECRETS.split(',').map(s => s.trim()).filter(Boolean)
   : [TOKEN_SECRET];
 const CURRENT_KID = process.env.AUTH_JWT_KID ?? '1';
+const revokedAccessTokenJtis = new Map<string, number>();
 
 function base64UrlEncode(input: string): string {
   return Buffer.from(input)
@@ -83,6 +102,34 @@ function signJwt(payload: Record<string, unknown>): string {
     .replace(/\//g, '_');
 
   return `${data}.${signature}`;
+}
+
+function pruneRevokedAccessTokens(): void {
+  const now = Date.now();
+  for (const [jti, expiresAtMs] of revokedAccessTokenJtis.entries()) {
+    if (expiresAtMs <= now) {
+      revokedAccessTokenJtis.delete(jti);
+    }
+  }
+}
+
+function createRefreshToken(subject: string, sessionId?: string): { token: string; expiresIn: number; jti: string } {
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  const jti = crypto.randomUUID();
+  const payload = {
+    sub: subject,
+    iat: nowSeconds,
+    exp: nowSeconds + REFRESH_TOKEN_TTL_SECONDS,
+    jti,
+    sid: sessionId,
+    typ: 'refresh'
+  };
+
+  return {
+    token: signJwt(payload),
+    expiresIn: REFRESH_TOKEN_TTL_SECONDS,
+    jti
+  };
 }
 
 export function verifyJwt(token: string): any {
@@ -136,18 +183,44 @@ function toSafeClaimCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
 }
 
-export function createAuthToken(subject: string): { token: string; expiresIn: number } {
+export function createAuthToken(subject: string, sessionId?: string): { token: string; expiresIn: number; jti: string } {
   const nowSeconds = Math.floor(Date.now() / 1000);
+  const jti = crypto.randomUUID();
   const payload = {
     sub: subject,
     iat: nowSeconds,
     exp: nowSeconds + TOKEN_TTL_SECONDS,
-    jti: crypto.randomUUID()
+    jti,
+    sid: sessionId,
+    typ: 'access'
   };
 
   return {
     token: signJwt(payload),
-    expiresIn: TOKEN_TTL_SECONDS
+    expiresIn: TOKEN_TTL_SECONDS,
+    jti
+  };
+}
+
+async function issueAuthPair(input: {
+  subject: string;
+  deviceId?: string;
+  sessionId?: string;
+}): Promise<ClaimAuthResult> {
+  const sessionId = input.sessionId ?? crypto.randomUUID();
+  const access = createAuthToken(input.subject, sessionId);
+  const refresh = createRefreshToken(input.subject, sessionId);
+
+  return {
+    token: access.token,
+    accessToken: access.token,
+    tokenType: 'Bearer',
+    expiresIn: access.expiresIn,
+    method: 'claim_code',
+    deviceId: input.deviceId,
+    refreshToken: refresh.token,
+    refreshExpiresIn: refresh.expiresIn,
+    sessionId
   };
 }
 
@@ -189,16 +262,10 @@ export async function claimAccess(claimCode: string, deviceId?: string): Promise
     throw new Error('CLAIM_CODE_NOT_FOUND_OR_USED');
   }
 
-  const { token, expiresIn } = createAuthToken(`claimer:${normalizedCode}`);
-
-  return {
-    token,
-    accessToken: token,
-    tokenType: 'Bearer',
-    expiresIn,
-    method: 'claim_code',
-    deviceId
-  };
+  return issueAuthPair({
+    subject: `claimer:${normalizedCode}`,
+    deviceId: deviceId ?? `claimer:${normalizedCode}`
+  });
 }
 
 export async function initiatePayment(input: PaymentInitiateInput): Promise<PaymentInitiateResult> {
@@ -264,13 +331,19 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
     }
 
     if (existingPayment.status === 'SUCCEEDED') {
-      const { token, expiresIn } = createAuthToken(`payment:${existingPayment.transactionId}`);
+      const pair = await issueAuthPair({
+        subject: `payment:${existingPayment.transactionId}`,
+        deviceId: input.deviceId ?? `payment:${existingPayment.transactionId}`
+      });
       return {
         orderId: existingPayment.transactionId,
         status: existingPayment.status,
         idempotent: true,
-        token,
-        expiresIn,
+        token: pair.token,
+        expiresIn: pair.expiresIn,
+        refreshToken: pair.refreshToken,
+        refreshExpiresIn: pair.refreshExpiresIn,
+        sessionId: pair.sessionId,
         deviceId: input.deviceId
       };
     }
@@ -327,13 +400,73 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
     };
   }
 
-  const { token, expiresIn } = createAuthToken(`payment:${updated.transactionId}`);
+  const issued = await issueAuthPair({
+    subject: `payment:${updated.transactionId}`,
+    deviceId: input.deviceId ?? `payment:${updated.transactionId}`
+  });
+
   return {
     orderId: updated.transactionId,
     status: mappedStatus,
     idempotent: false,
-    token,
-    expiresIn,
+    token: issued.token,
+    expiresIn: issued.expiresIn,
+    refreshToken: issued.refreshToken,
+    refreshExpiresIn: issued.refreshExpiresIn,
+    sessionId: issued.sessionId,
     deviceId: input.deviceId
   };
+}
+
+export async function refreshAuthSession(rawToken: string): Promise<RefreshAuthResult> {
+  const candidate = rawToken.trim();
+  if (!candidate) {
+    throw new Error('INVALID_REFRESH_TOKEN');
+  }
+
+  const payload = verifyJwt(candidate);
+  const typ = typeof payload.typ === 'string' ? payload.typ : '';
+
+  if (typ !== 'refresh') {
+    throw new Error('INVALID_REFRESH_TOKEN');
+  }
+
+  const subject = typeof payload.sub === 'string' && payload.sub ? payload.sub : 'refresh-token';
+  if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
+    throw new Error('INVALID_REFRESH_TOKEN');
+  }
+
+  return issueAuthPair({
+    subject,
+    deviceId: typeof payload.sid === 'string' ? payload.sid : undefined,
+    sessionId: typeof payload.sid === 'string' ? payload.sid : undefined
+  });
+}
+
+export async function revokeAuthSessionByAccessToken(token: string): Promise<void> {
+  const payload = verifyJwt(token);
+  const jti = typeof payload.jti === 'string' ? payload.jti : '';
+
+  if (!jti) {
+    throw new Error('INVALID_SESSION');
+  }
+
+  const expiresAt = typeof payload.exp === 'number' ? payload.exp * 1000 : Date.now() + TOKEN_TTL_SECONDS * 1000;
+  revokedAccessTokenJtis.set(jti, expiresAt);
+}
+
+export async function isAccessTokenSessionActive(token: string): Promise<boolean> {
+  try {
+    const payload = verifyJwt(token);
+    const jti = typeof payload.jti === 'string' ? payload.jti : '';
+
+    if (!jti) {
+      return false;
+    }
+
+    pruneRevokedAccessTokens();
+    return !revokedAccessTokenJtis.has(jti);
+  } catch {
+    return false;
+  }
 }

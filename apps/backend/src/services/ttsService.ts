@@ -229,6 +229,76 @@ async function saveAudioFile(fileName: string, content: Buffer): Promise<string>
   return saveLocalAudioFile(fileName, content);
 }
 
+async function listLocalAudioFiles(): Promise<string[]> {
+  try {
+    return await fs.readdir(getLocalAudioDirectory());
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+      return [];
+    }
+
+    throw error;
+  }
+}
+
+export async function cleanupPoiAudioFiles(poiId: string, keepFileNames: string[] = []): Promise<number> {
+  const safePoiId = poiId.trim();
+  if (!safePoiId) {
+    return 0;
+  }
+
+  const keepSet = new Set(keepFileNames.map((name) => name.trim()).filter(Boolean));
+  const directory = getLocalAudioDirectory();
+  const files = await listLocalAudioFiles();
+  let removedCount = 0;
+
+  await Promise.all(
+    files
+      .filter((fileName) => fileName.startsWith(`${safePoiId}_`) && !keepSet.has(fileName))
+      .map(async (fileName) => {
+        try {
+          await fs.rm(path.join(directory, fileName), { force: true });
+          removedCount += 1;
+        } catch (error) {
+          console.warn('[TTS] Failed to cleanup audio file', { fileName, error });
+        }
+      })
+  );
+
+  return removedCount;
+}
+
+async function cleanupOlderPoiAudioVersions(poiId: string, language: string, keepFileName: string): Promise<number> {
+  const safePoiId = poiId.trim();
+  const safeLanguage = language.trim().toLowerCase();
+  if (!safePoiId || !safeLanguage) {
+    return 0;
+  }
+
+  const directory = getLocalAudioDirectory();
+  const files = await listLocalAudioFiles();
+  let removedCount = 0;
+
+  await Promise.all(
+    files
+      .filter(
+        (fileName) =>
+          fileName.startsWith(`${safePoiId}_${safeLanguage}_v`) &&
+          fileName !== keepFileName
+      )
+      .map(async (fileName) => {
+        try {
+          await fs.rm(path.join(directory, fileName), { force: true });
+          removedCount += 1;
+        } catch (error) {
+          console.warn('[TTS] Failed to cleanup stale audio version', { fileName, error });
+        }
+      })
+  );
+
+  return removedCount;
+}
+
 async function synthesizeWithPiper(text: string, language: string): Promise<Buffer> {
   const modelPath = resolvePiperModelPath(language);
   await fs.access(modelPath);
@@ -294,6 +364,7 @@ async function processTtsJob(payload: TtsJobPayload): Promise<{ poiId: string; l
   const audioBuffer = await synthesizeWithPiper(payload.text, payload.language);
   const fileName = `${payload.poiId}_${payload.language}_v${payload.contentVersion}.wav`;
   const audioUrl = await saveAudioFile(fileName, audioBuffer);
+  await cleanupOlderPoiAudioVersions(payload.poiId, payload.language, fileName);
 
   await prisma.$executeRaw`
     UPDATE points_of_interest

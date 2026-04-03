@@ -52,3 +52,5 @@ THEN tour appears with preserved order in local SQLite
 1. Admin actions must not alter client invariants around explicit-trigger playback.
 2. Publish flow must keep sync contract compatible with existing mobile clients.
 3. Auditability is required for high-impact content operations.
+4. Soft delete means hide from mobile immediately, retain DB row for audit for a defined retention window, then cleanup physical media by policy.
+5. Cleanup retention window and delete-owner responsibility must be documented and owned by backend/admin team before release.
