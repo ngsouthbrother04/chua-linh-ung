@@ -22,9 +22,9 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { events } = req.body;
-    
+
     const processedCount = await processBatchEvents(events);
-    
+
     return res.status(200).json({
       status: 'success',
       processedCount,
@@ -51,7 +51,7 @@ router.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const result = await processPresenceHeartbeat(req.body);
-    
+
     return res.status(200).json({
       status: 'success',
       ...result
@@ -73,7 +73,7 @@ router.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const stats = await getAnalyticsStats();
-    
+
     return res.status(200).json({
       status: 'success',
       data: stats

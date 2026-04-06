@@ -1,0 +1,777 @@
+{
+  "info": {
+    "_postman_id": "bfa86fb0-ca7d-411a-a032-1b15132c3ae9",
+    "name": "PhoAmThuc API",
+    "description": "Toàn bộ API hiện có của dự án Phố Ẩm Thực theo kiến trúc mới (Freemium, Auth JWT, API Sync). Chứa Test Scripts tự động cập nhật token.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register (Đăng ký)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
+                  "}",
+                  "if (jsonData.refreshToken) {",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"Nguyen Van A\",\n  \"deviceId\": \"mobile-device-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Login (Đăng nhập)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
+                  "}",
+                  "if (jsonData.refreshToken) {",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"deviceId\": \"mobile-device-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Token Refresh",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.token) {",
+                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
+                  "}",
+                  "if (jsonData.refreshToken) {",
+                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/token-refresh",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "token-refresh"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.unset(\"token\");",
+                  "    pm.collectionVariables.unset(\"refreshToken\");",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/logout",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            }
+          }
+        },
+        {
+          "name": "Payment Initiate (Nạp tiền)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"vnpay\",\n  \"amount\": 50000,\n  \"returnUrl\": \"https://your-app.com/payment/callback\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/payment/initiate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "payment", "initiate"]
+            }
+          }
+        },
+        {
+          "name": "Payment Claim (Nhập Mã Mua Gói Ngôn Ngữ)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"GIFT-CODE-HERE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/payment/claim",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "payment", "claim"]
+            }
+          }
+        },
+        {
+          "name": "Payment Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-idempotency-key", "value": "{{idempotencyKey}}" },
+              { "key": "x-callback-signature", "value": "SIGNATURE_HERE" },
+              { "key": "x-callback-timestamp", "value": "{{callbackTimestamp}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionId\": \"txn_123456\",\n  \"status\": \"success\",\n  \"deviceId\": \"mobile-device-1\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/payment/callback",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "auth", "payment", "callback"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Sync",
+      "item": [
+        {
+          "name": "Sync Manifest",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/manifest",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "sync", "manifest"]
+            }
+          }
+        },
+        {
+          "name": "Sync Full (Danh sách địa điểm & Tours bản Offline)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/full?version=0",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "sync", "full"],
+              "query": [
+                {
+                  "key": "version",
+                  "value": "0"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Sync Incremental",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fromVersion\": 1\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/incremental",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "sync", "incremental"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "POIs",
+      "item": [
+        {
+          "name": "Get POIs (Public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pois?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pois"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get POI By Id (Public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pois/{{poiId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pois", "{{poiId}}"]
+            }
+          }
+        },
+        {
+          "name": "Search POIs By Radius",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 16.0544,\n  \"longitude\": 108.2022,\n  \"radiusM\": 3000,\n  \"limit\": 20\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pois/search/radius",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "pois", "search", "radius"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tours",
+      "item": [
+        {
+          "name": "Get Tours (Public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tours?page=1&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tours"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Tour By Id (Public)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/tours/{{tourId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "tours", "{{tourId}}"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Batch Events",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\n      \"eventType\": \"poi_view\",\n      \"poiId\": \"{{poiId}}\",\n      \"occurredAt\": \"2026-04-06T10:00:00.000Z\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "events"]
+            }
+          }
+        },
+        {
+          "name": "Presence Heartbeat",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sessionId\": \"session-001\",\n  \"screen\": \"poi_detail\",\n  \"poiId\": \"{{poiId}}\",\n  \"timestamp\": \"2026-04-06T10:00:00.000Z\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/presence/heartbeat",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "presence", "heartbeat"]
+            }
+          }
+        },
+        {
+          "name": "Get Analytics Stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{token}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/stats",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Get All POIs",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois"]
+            }
+          }
+        },
+        {
+          "name": "Create POI",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": { \"vi\": \"Chùa A\", \"en\": \"Pagoda A\" },\n  \"description\": { \"vi\": \"Mô tả ngắn\", \"en\": \"Short Desc\" },\n  \"latitude\": 20.0,\n  \"longitude\": 105.0,\n  \"type\": \"HISTORICAL_SITE\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois"]
+            }
+          }
+        },
+        {
+          "name": "Get POI By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update POI",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": { \"vi\": \"Chùa A cập nhật\", \"en\": \"Pagoda A Updated\" },\n  \"description\": { \"vi\": \"Mô tả mới\", \"en\": \"Updated description\" },\n  \"latitude\": 20.001,\n  \"longitude\": 105.001\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete POI",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
+            }
+          }
+        },
+        {
+          "name": "Publish POI",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/publish",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "publish"]
+            }
+          }
+        },
+        {
+          "name": "Generate POI Audio",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/audio/generate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "audio", "generate"]
+            }
+          }
+        },
+        {
+          "name": "Upload POI Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/image/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "image", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Create Tour",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": { \"vi\": \"Tour Chùa\", \"en\": \"Pagoda Tour\" },\n  \"description\": { \"vi\": \"Mô tả tour\", \"en\": \"Tour description\" },\n  \"durationMinutes\": 90,\n  \"poiIds\": [\"{{poiId}}\"]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tours"]
+            }
+          }
+        },
+        {
+          "name": "Get Tour By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
+            }
+          }
+        },
+        {
+          "name": "Update Tour",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": { \"vi\": \"Tour cập nhật\", \"en\": \"Updated tour\" },\n  \"description\": { \"vi\": \"Mô tả mới\", \"en\": \"New description\" },\n  \"durationMinutes\": 120\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
+            }
+          }
+        },
+        {
+          "name": "Delete Tour",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
+            }
+          }
+        },
+        {
+          "name": "Upload Tour Image",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}/image/upload",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tours", "{{tourId}}", "image", "upload"]
+            }
+          }
+        },
+        {
+          "name": "Maintenance Cleanup Soft Delete POIs",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dryRun\": true\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/maintenance/pois/soft-delete-cleanup",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "maintenance", "pois", "soft-delete-cleanup"]
+            }
+          }
+        },
+        {
+          "name": "Invalidate Sync Manifest",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/sync/invalidate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "sync", "invalidate"]
+            }
+          }
+        },
+        {
+          "name": "Status TTS Queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tts/queue/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tts", "queue", "status"]
+            }
+          }
+        },
+        {
+          "name": "Validate TTS Config",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tts/config/validate",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "admin", "tts", "config", "validate"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/",
+              "host": ["{{baseUrl}}"],
+              "path": [""]
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [""]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "ACCESS_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "REFRESH_TOKEN_HERE",
+      "type": "string"
+    },
+    {
+      "key": "adminApiKey",
+      "value": "ADMIN_KEY_HERE",
+      "type": "string"
+    },
+    {
+      "key": "poiId",
+      "value": "poi-id-here",
+      "type": "string"
+    },
+    {
+      "key": "tourId",
+      "value": "tour-id-here",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "idem-key-001",
+      "type": "string"
+    },
+    {
+      "key": "callbackTimestamp",
+      "value": "1712390400000",
+      "type": "string"
+    }
+  ]
+}
