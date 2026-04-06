@@ -17,6 +17,8 @@ This file is intentionally short. All AI agents should read the same documents i
 9. MASTER_INDEX.md
 10. IMPLEMENTATION_TASK_BREAKDOWN.md
 11. EXECUTION_TODO_ISSUES.md
+12. **Backend only**: SWAGGER_CONVENTION.md (API documentation standards)
+13. **Backend only**: OPENAPI_SCHEMA_ENHANCEMENT.md (for complex schema definitions)
 
 Terminology note:
 - AL_GUIDELINES.md in requests is treated as AI_GUIDELINES.md in this repository.
@@ -32,6 +34,13 @@ Terminology note:
 7. For overlap zones: highlight can be multi-POI, but audio remains tap/QR only; recommendation (if any) must be deterministic.
 8. For TTS scaling: keep monolith + Redis queue with idempotent job keys and retry policy.
 9. For dashboard online users: use TTL metrics (`online_now`=90s, `active_5m`=5m), and label windows clearly.
+10. **Swagger/OpenAPI (Backend Only)**:
+    - All new routes MUST have JSDoc @summary, @description, @param, @return comments
+    - Before committing route changes, run: `npm run openapi:generate && npm run openapi:lint`
+    - Separate commits: code change first, then spec generation (`git commit -m "docs(openapi): regenerate"`)
+    - Follow SWAGGER_CONVENTION.md for JSDoc format and validation practices
+    - Complex schemas: refer to OPENAPI_SCHEMA_ENHANCEMENT.md for strategies
+    - Quick validation: `npm run openapi:diff-check` warns if spec appears out of date
 
 ## Setup
 App strictly avoids geofencing and automatic GPS playback. Read the canonical docs before coding to keep Tap/QR trigger behavior, offline-first flow, and Single Voice Rule consistent.
