@@ -9,6 +9,11 @@
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
+    "openapi:generate:raw": "node swagger.config.cjs",
+    "openapi:postprocess": "node scripts/openapi-postprocess.cjs",
+    "openapi:generate": "npm run openapi:generate:raw && npm run openapi:postprocess",
+    "openapi:check": "node -e \"JSON.parse(require('fs').readFileSync('./openapi.json','utf8')); console.log('openapi.json valid');\"",
+    "openapi:lint": "redocly lint --config .redocly.yaml openapi.json",
     "tts:validate": "ts-node --transpile-only src/scripts/validateTtsConfig.ts",
     "prisma:format": "prisma format --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
@@ -23,6 +28,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1017.0",
     "@types/multer": "^2.1.0",
+    "@types/swagger-ui-express": "^4.1.8",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.71.0",
     "cloudinary": "^2.9.0",
@@ -33,10 +39,12 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.10.1",
     "multer": "^2.1.1",
-    "nodemon": "^3.1.11"
+    "nodemon": "^3.1.11",
+    "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {
     "@prisma/client": "^6.19.0",
+    "@redocly/cli": "^2.25.4",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -45,6 +53,7 @@
     "@types/supertest": "^7.2.0",
     "prisma": "^6.19.0",
     "supertest": "^7.2.2",
+    "swagger-autogen": "^2.23.7",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "vitest": "^4.1.1"
