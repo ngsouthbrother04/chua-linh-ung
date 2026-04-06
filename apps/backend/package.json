@@ -14,6 +14,8 @@
     "openapi:generate": "npm run openapi:generate:raw && npm run openapi:postprocess",
     "openapi:check": "node -e \"JSON.parse(require('fs').readFileSync('./openapi.json','utf8')); console.log('openapi.json valid');\"",
     "openapi:lint": "redocly lint --config .redocly.yaml openapi.json",
+    "openapi:diff-check": "node scripts/openapi-diff-check.cjs",
+    "openapi:diff-check:strict": "node scripts/openapi-diff-check.cjs --strict",
     "tts:validate": "ts-node --transpile-only src/scripts/validateTtsConfig.ts",
     "prisma:format": "prisma format --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
