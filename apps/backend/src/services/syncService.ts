@@ -229,3 +229,82 @@ export async function getSyncFull(isPremium: boolean = false): Promise<SyncFullR
     }))
   };
 }
+
+export interface SyncIncrementalResult {
+  fromVersion: number;
+  toVersion: number;
+  changes: {
+    pois: SyncFullPoi[];
+    tours: SyncFullTour[];
+    deletedPoiIds: string[];
+    deletedTourIds: string[];
+  };
+  requiresFullSync: boolean;
+}
+
+export async function getSyncIncremental(fromVersion: number, isPremium: boolean = false): Promise<SyncIncrementalResult> {
+  const [settings, manifest, pois, tours, deletedPois, deletedTours] = await Promise.all([
+    prisma.appSetting.findUnique({
+      where: { id: 1 },
+      select: { currentVersion: true, deltaWindowVersions: true }
+    }),
+    getSyncManifest(isPremium),
+    prisma.pointOfInterest.findMany({
+      where: { deletedAt: null, isPublished: true, contentVersion: { gt: fromVersion } },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.tour.findMany({
+      where: { deletedAt: null, isPublished: true, contentVersion: { gt: fromVersion } },
+      orderBy: { id: 'asc' },
+    }),
+    prisma.pointOfInterest.findMany({
+      where: { deletedAt: { not: null }, contentVersion: { gt: fromVersion } },
+      select: { id: true }
+    }),
+    prisma.tour.findMany({
+      where: { deletedAt: { not: null }, contentVersion: { gt: fromVersion } },
+      select: { id: true }
+    })
+  ]);
+
+  const toVersion = manifest.contentVersion;
+  const deltaWindow = settings?.deltaWindowVersions ?? 5;
+
+  if (toVersion - fromVersion > deltaWindow || fromVersion < 0) {
+    return {
+      fromVersion,
+      toVersion,
+      changes: { pois: [], tours: [], deletedPoiIds: [], deletedTourIds: [] },
+      requiresFullSync: true
+    };
+  }
+
+  return {
+    fromVersion,
+    toVersion,
+    requiresFullSync: false,
+    changes: {
+      pois: pois.map((poi) => ({
+        id: poi.id,
+        name: isPremium ? poi.name : stripPremiumLanguages(poi.name),
+        description: isPremium ? poi.description : stripPremiumLanguages(poi.description),
+        audioUrls: isPremium ? poi.audioUrls : stripPremiumLanguages(poi.audioUrls),
+        latitude: Number(poi.latitude),
+        longitude: Number(poi.longitude),
+        type: poi.type,
+        image: poi.image
+      })),
+      tours: tours.map((tour) => ({
+        id: tour.id,
+        name: isPremium ? tour.name : stripPremiumLanguages(tour.name),
+        description: isPremium ? tour.description : stripPremiumLanguages(tour.description),
+        duration: tour.duration,
+        poiIds: tour.poiIds,
+        image: tour.image,
+        createdAt: tour.createdAt.toISOString()
+      })),
+      deletedPoiIds: deletedPois.map(p => p.id),
+      deletedTourIds: deletedTours.map(t => t.id)
+    }
+  };
+}

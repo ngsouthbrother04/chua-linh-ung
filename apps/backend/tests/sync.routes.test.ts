@@ -3,12 +3,13 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import syncRouter from '../src/routes/api/sync';
 import { errorHandlingMiddleware, notFoundMiddleware } from '../src/middlewares/errorHandlingMiddleware';
-import { getSyncFull, getSyncManifest } from '../src/services/syncService';
+import { getSyncFull, getSyncManifest, getSyncIncremental } from '../src/services/syncService';
 import { isAccessTokenSessionActive, verifyJwt, isUserPremium } from '../src/services/authService';
 
 vi.mock('../src/services/syncService', () => ({
   getSyncManifest: vi.fn(),
-  getSyncFull: vi.fn()
+  getSyncFull: vi.fn(),
+  getSyncIncremental: vi.fn()
 }));
 
 vi.mock('../src/services/authService', () => ({
@@ -153,5 +154,58 @@ describe('SYNC routes', () => {
     expect(res.body.pois).toEqual([]);
     expect(res.body.tours).toEqual([]);
     expect(getSyncFull).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/v1/sync/incremental should return 409 and fallback flag when window is exceeded (TC-18.5)', async () => {
+    const app = createApp();
+    vi.mocked(getSyncIncremental).mockResolvedValue({
+      fromVersion: 1,
+      toVersion: 6,
+      requiresFullSync: true,
+      changes: { pois: [], tours: [], deletedPoiIds: [], deletedTourIds: [] }
+    });
+
+    const res = await request(app)
+      .post('/api/v1/sync/incremental')
+      .send({ fromVersion: 1 })
+      .set('Authorization', 'Bearer test-token');
+
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('DELTA_WINDOW_EXCEEDED');
+    expect(res.body.data.requiresFullSync).toBe(true);
+  });
+
+  it('POST /api/v1/sync/incremental should return delta data on success (TC-18.4)', async () => {
+    const app = createApp();
+    vi.mocked(getSyncIncremental).mockResolvedValue({
+      fromVersion: 5,
+      toVersion: 6,
+      requiresFullSync: false,
+      changes: { 
+        pois: [{
+          id: 'poi-2',
+          name: { vi: 'B' },
+          description: { vi: 'C' },
+          audioUrls: { vi: 'url2' },
+          latitude: 21.1,
+          longitude: 105.9,
+          type: 'SNACK',
+          image: null
+        }], 
+        tours: [], 
+        deletedPoiIds: ['poi-1'], 
+        deletedTourIds: [] 
+      }
+    });
+
+    const res = await request(app)
+      .post('/api/v1/sync/incremental')
+      .send({ fromVersion: 5 })
+      .set('Authorization', 'Bearer test-token');
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.requiresFullSync).toBe(false);
+    expect(res.body.data.changes.pois).toHaveLength(1);
+    expect(res.body.data.changes.deletedPoiIds).toEqual(['poi-1']);
   });
 });

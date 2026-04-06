@@ -29,6 +29,7 @@ Nguyên tắc:
 - ISSUE-002: ĐÃ HOÀN THÀNH
 - ISSUE-003: ĐÃ HOÀN THÀNH
 - ISSUE-003B: ĐÃ HOÀN THÀNH
+- ISSUE-013: ĐÃ HOÀN THÀNH
 - ISSUE-014: ĐÃ HOÀN THÀNH
 - ISSUE-015: ĐÃ HOÀN THÀNH
 - ISSUE-016: ĐÃ HOÀN THÀNH
@@ -58,10 +59,10 @@ Dựa trên soát xét đối chiếu với PRD và Backend Design, một lượ
 
 **A. Người 1 (Nhánh `3122410411`) phụ trách:**
 
-1. **Sync delta API**: `POST /api/v1/sync/incremental` + fallback `/sync/full` khi vượt delta window.
-2. **Public content API**: `GET /api/v1/pois`, `GET /api/v1/pois/:id`, `POST /api/v1/pois/search/radius`, `GET /api/v1/tours`, `GET /api/v1/tours/:id`.
-3. **Analytics API**: `POST /api/v1/analytics/events`, `POST /api/v1/analytics/presence/heartbeat` (`online_now`/`active_5m`), và `GET /api/v1/analytics/stats`.
-4. **Test completeness**: Mở rộng và pass toàn bộ TC-18.1 -> TC-18.8 trong `docs/test_scenarios.md`.
+1. **ĐÃ HOÀN THÀNH Sync delta API**: `POST /api/v1/sync/incremental` + fallback `/sync/full` khi vượt delta window.
+2. **ĐÃ HOÀN THÀNH Public content API**: `GET /api/v1/pois`, `GET /api/v1/pois/:id`, `POST /api/v1/pois/search/radius`, `GET /api/v1/tours`, `GET /api/v1/tours/:id`.
+3. **ĐÃ HOÀN THÀNH Analytics API**: `POST /api/v1/analytics/events`, `POST /api/v1/analytics/presence/heartbeat` (`online_now`/`active_5m`), và `GET /api/v1/analytics/stats`.
+4. **ĐÃ HOÀN THÀNH Test completeness**: Mở rộng và pass toàn bộ TC-18.1 -> TC-18.8 trong `docs/test_scenarios.md`.
 
 **B. Người 4 (Nhánh `3122560001`) phụ trách:**
 

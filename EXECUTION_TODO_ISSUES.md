@@ -160,10 +160,16 @@ Acceptance mapping: TC-3.2, TC-4.2, TC-6.x
 
 ### ISSUE-013 - Integration and scenario tests
 
-Status: TODO
+Status: DONE
 Priority: P1
 Scope: Validate end-to-end critical scenarios across UC1~UC8, including auth token lifecycle, offline sync (manifest/full/incremental), public POI/tour APIs, i18n fallback, QR errors, and analytics buffering/upload + heartbeat.
 Acceptance mapping: docs/test_scenarios.md (Functional + Integration + Performance subsets, including TC-18.1 -> TC-18.8)
+
+Completion note:
+
+1. TC-18.1 to TC-18.3 checked for Auth and Full Sync endpoints.
+2. TC-18.4 to TC-18.8 passed using testing APIs for POIs, Tours, Sync Incremental, and Analytics Presence endpoints.
+3. Successfully run complete suite spanning `sync.routes.test.ts`, `public-content.routes.test.ts`, and `analytics.routes.test.ts`.
 
 ### ISSUE-015 - JWT Key Rotation & Security Middleware
 
