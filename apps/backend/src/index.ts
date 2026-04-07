@@ -75,8 +75,8 @@ app.get('/', async (req, res) => {
 app.use(notFoundMiddleware);
 app.use(errorHandlingMiddleware);
 
-app.listen(PORT, async () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+app.listen(PORT, "0.0.0.0", async () => { // Thêm "0.0.0.0" để cho phép kết nối từ ngoài vào
+  console.log(`Server running on http://0.0.0.0:${PORT}`);
   try {
     await prisma.$connect();
     console.log('Database connected successfully');
@@ -102,4 +102,12 @@ app.listen(PORT, async () => {
   } catch (error) {
     console.error('Database connection failed:', error);
   }
+});
+// Thêm vào cuối file index.ts
+process.on('unhandledRejection', (reason, p) => {
+  console.log('Unhandled Rejection at: Promise', p, 'reason:', reason);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err);
 });
