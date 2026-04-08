@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon src/index.ts",
+    "dev": "nodemon --watch src --ext ts,json --exec \"tsx src/index.ts\"",
     "build": "tsc",
     "start": "node dist/index.js",
     "test": "vitest run",
@@ -16,12 +16,12 @@
     "openapi:lint": "redocly lint --config .redocly.yaml openapi.json",
     "openapi:diff-check": "node scripts/openapi-diff-check.cjs",
     "openapi:diff-check:strict": "node scripts/openapi-diff-check.cjs --strict",
-    "tts:validate": "ts-node --transpile-only src/scripts/validateTtsConfig.ts",
+    "tts:validate": "tsx src/scripts/validateTtsConfig.ts",
     "prisma:format": "prisma format --schema prisma/schema.prisma",
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
-    "prisma:seed": "ts-node --transpile-only -r dotenv/config prisma/seed.ts",
+    "prisma:seed": "tsx -r dotenv/config prisma/seed.ts",
     "db:setup": "npm run prisma:migrate:deploy && npm run prisma:generate && npm run prisma:seed"
   },
   "keywords": [],
@@ -57,6 +57,7 @@
     "supertest": "^7.2.2",
     "swagger-autogen": "^2.23.7",
     "ts-node": "^10.9.2",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.1.1"
   }
