@@ -1,4 +1,4 @@
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 
 async function generate() {
     const salt = await bcrypt.genSalt(10);

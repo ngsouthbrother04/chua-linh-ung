@@ -20,7 +20,8 @@ import { initializePoiSoftDeleteCleanupScheduler } from './services/poiAdminServ
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const parsedPort = Number(process.env.PORT);
+const PORT = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
 const OPENAPI_FILE_PATH = path.resolve(process.cwd(), 'openapi.json');
 
 function loadOpenApiSpec() {
