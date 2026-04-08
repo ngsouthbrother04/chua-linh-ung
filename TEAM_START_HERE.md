@@ -74,6 +74,124 @@ npm run db:setup
 2. `prisma generate`
 3. `prisma seed`
 
+## Sơ đồ DB (Mermaid)
+
+Sơ đồ dưới đây mô tả các bảng chính và quan hệ quan trọng để team FE nắm được luồng dữ liệu nhanh.
+
+```mermaid
+erDiagram
+    CLAIM_CODES ||--o{ USERS : "claim_code_id"
+    USERS ||--o{ AUTH_SESSIONS : "user_id"
+    USERS ||--o{ PAYMENT_TRANSACTIONS : "user_id"
+    PAYMENT_TRANSACTIONS ||--o{ PAYMENT_CALLBACK_EVENTS : "transaction_id"
+    POINTS_OF_INTEREST ||--o{ ANALYTICS_EVENTS : "poi_id"
+
+    POINTS_OF_INTEREST {
+        uuid id PK
+        json name
+        json description
+        json audio_urls
+        decimal latitude
+        decimal longitude
+        enum type
+        bool is_published
+        int content_version
+    }
+
+    TOURS {
+        uuid id PK
+        json name
+        json description
+        json poi_ids
+        bool is_published
+        int content_version
+    }
+
+    ANALYTICS_EVENTS {
+        bigint id PK
+        string device_id
+        string session_id
+        uuid poi_id FK
+        enum action
+        bigint timestamp
+        bool uploaded
+    }
+
+    CLAIM_CODES {
+        uuid id PK
+        string code UK
+        bool is_active
+        bool is_used
+        int current_uses
+    }
+
+    USERS {
+        uuid id PK
+        string email UK
+        enum role
+        uuid claim_code_id FK
+        bool is_active
+        datetime token_invalid_before
+    }
+
+    AUTH_SESSIONS {
+        uuid id PK
+        uuid user_id FK
+        string device_id
+        string refresh_token_hash UK
+        string access_token_jti UK
+        datetime expires_at
+        datetime revoked_at
+    }
+
+    PAYMENT_TRANSACTIONS {
+        uuid id PK
+        uuid user_id FK
+        string transaction_id UK
+        enum provider
+        enum status
+        int amount
+        string payment_url
+        datetime expires_at
+    }
+
+    PAYMENT_CALLBACK_EVENTS {
+        uuid id PK
+        string idempotency_key UK
+        string transaction_id FK
+        enum provider
+        enum status
+        bool processed
+    }
+
+    APP_SETTINGS {
+        int id PK
+        int current_version
+        string data_checksum
+        string media_base_path
+    }
+
+    SYNC_CHANGE_LOGS {
+        bigint id PK
+        enum entity_type
+        string entity_id
+        enum action
+        int content_version
+    }
+
+    ANALYTICS_PRESENCE {
+        string device_id PK
+        string session_id
+        string language
+        datetime last_heartbeat_at
+    }
+```
+
+Ghi chú:
+
+- `TOURS.poi_ids` là JSON list id của POI, không phải foreign key trực tiếp.
+- `APP_SETTINGS`, `SYNC_CHANGE_LOGS`, `ANALYTICS_PRESENCE` là các bảng độc lập (không khai báo relation FK trong Prisma hiện tại).
+
 ## 6) Chạy Backend server
 
 Chạy từ root (khuyến nghị):
