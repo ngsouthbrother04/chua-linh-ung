@@ -13,11 +13,12 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import API from '../api/api';
-
+import { useTranslation } from 'react-i18next';
+import '../i18n/i18n'; // Import file cấu hình
 export default function ProfileScreen({ navigation }) {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
-  
+  const { t, i18n } = useTranslation();
   // State mật khẩu
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
@@ -29,7 +30,9 @@ export default function ProfileScreen({ navigation }) {
   useEffect(() => {
     loadData();
   }, []);
-
+    const changeLanguage = (lng) => {
+    i18n.changeLanguage(lng); // Hàm này sẽ đổi ngôn ngữ toàn App ngay lập tức
+  };
   const loadData = async () => {
     try {
       const token = await AsyncStorage.getItem('userToken');
@@ -125,6 +128,7 @@ export default function ProfileScreen({ navigation }) {
   };
 
   return (
+    
     <KeyboardAvoidingView 
       style={{ flex: 1 }}
       behavior={Platform.OS === "ios" ? "padding" : "height"}

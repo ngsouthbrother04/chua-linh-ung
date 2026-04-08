@@ -8,6 +8,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Speech from 'expo-speech';
 import { CommonActions } from '@react-navigation/native';
 import API from "../api/api";
+import { autoTranslate } from "../utils/translator"; // Đảm bảo import đúng đường dẫn
 
 const { width, height } = Dimensions.get("window");
 
@@ -21,53 +22,42 @@ const LANGUAGES = [
 ];
 
 export default function HomeScreen({ navigation }) {
-  // --- TẤT CẢ HOOKS PHẢI NẰM TRONG NÀY ---
-  
-  // States dữ liệu POI
+  // --- STATES ---
   const [pois, setPois] = useState([]);
   const [filteredPois, setFilteredPois] = useState([]);
   const [selectedPoi, setSelectedPoi] = useState(null);
   const [loading, setLoading] = useState(true);
   
-  // States UI & Modals
   const [searchQuery, setSearchQuery] = useState("");
   const [isDropdownVisible, setIsDropdownVisible] = useState(false);
   const [isMenuVisible, setIsMenuVisible] = useState(false);
   const [isLangModalVisible, setIsLangModalVisible] = useState(false);
-  const [isPasswordModalVisible, setIsPasswordModalVisible] = useState(false);
   
-  // States Dịch & Thuyết minh
   const [lang, setLang] = useState(LANGUAGES[0]);
   const [translatedData, setTranslatedData] = useState({ name: "", desc: "" });
   const [isTranslating, setIsTranslating] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // States User & Mật khẩu
-  const [userData, setUserData] = useState({ name: "Người dùng", email: "guest@sgu.edu.vn" });
-  const [passwords, setPasswords] = useState({ old: '', new: '', confirm: '' });
-
+  const [userData, setUserData] = useState({ name: "Người dùng", email: "" });
   const mapRef = useRef(null);
 
-  // --- LOGIC FUNCTIONS ---
+  // --- LOGIC ---
 
   useEffect(() => {
     fetchPois();
     loadUserData();
-    
-    // Cập nhật lại tên khi quay về từ ProfileScreen
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadUserData();
-    });
+    const unsubscribe = navigation.addListener('focus', loadUserData);
     return unsubscribe;
   }, [navigation]);
 
+  // Tự động dịch mỗi khi đổi Địa điểm hoặc đổi Ngôn ngữ
   useEffect(() => {
     if (selectedPoi) handleAutoTranslate();
   }, [selectedPoi, lang]);
 
   const loadUserData = async () => {
     const name = await AsyncStorage.getItem('userName') || "Khách du lịch";
-    const email = await AsyncStorage.getItem('userEmail') || "user@student.sgu.edu.vn";
+    const email = await AsyncStorage.getItem('userEmail') || "";
     setUserData({ name, email });
   };
 
@@ -90,35 +80,39 @@ export default function HomeScreen({ navigation }) {
   };
 
   const handleAutoTranslate = async () => {
-    const originName = selectedPoi.name?.vi || "";
-    const originDesc = selectedPoi.description?.vi || "";
+    // Lưu ý: Sửa .name?.vi thành .name nếu bạn đã đổi DB sang String
+    const originName = selectedPoi.name?.vi || selectedPoi.name || "";
+    const originDesc = selectedPoi.description?.vi || selectedPoi.description || "";
+
     if (lang.code === 'vi') {
       setTranslatedData({ name: originName, desc: originDesc });
       return;
     }
+
+    setIsTranslating(true);
     try {
-      setIsTranslating(true);
-      const fetchT = async (text) => {
-        const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=vi&tl=${lang.code}&dt=t&q=${encodeURI(text)}`;
-        const res = await fetch(url);
-        const json = await res.json();
-        return json[0].map(item => item[0]).join("");
-      };
-      const [tName, tDesc] = await Promise.all([fetchT(originName), fetchT(originDesc)]);
+      const [tName, tDesc] = await Promise.all([
+        autoTranslate(originName, lang.code),
+        autoTranslate(originDesc, lang.code)
+      ]);
       setTranslatedData({ name: tName, desc: tDesc });
     } catch (e) {
       setTranslatedData({ name: originName, desc: originDesc });
-    } finally { setIsTranslating(false); }
+    } finally {
+      setIsTranslating(false);
+    }
   };
 
   const handleToggleSpeech = async () => {
     if (!translatedData.desc) return;
     const speaking = await Speech.isSpeakingAsync();
+    
     if (speaking || isSpeaking) {
       await Speech.stop();
       setIsSpeaking(false);
-      if (speaking) return;
+      return;
     }
+
     setIsSpeaking(true);
     Speech.speak(translatedData.desc, {
       language: lang.locale,
@@ -129,8 +123,7 @@ export default function HomeScreen({ navigation }) {
     });
   };
 
-
-  const handleLogout = () => {
+  const handleLogout = async () => {
     setIsMenuVisible(false);
     Alert.alert("Đăng xuất", "Bạn có chắc chắn muốn thoát?", [
       { text: "Hủy", style: "cancel" },
@@ -148,7 +141,7 @@ export default function HomeScreen({ navigation }) {
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
-      {/* HEADER & SEARCH */}
+      {/* SEARCH SECTION */}
       <View style={styles.searchSection}>
         <View style={styles.topRow}>
           <TouchableOpacity style={styles.roundBtn} onPress={() => setIsMenuVisible(true)}>
@@ -156,12 +149,12 @@ export default function HomeScreen({ navigation }) {
           </TouchableOpacity>
           <View style={styles.searchBar}>
             <TextInput
-              placeholder={lang.code === 'vi' ? "Khám phá ẩm thực..." : "Explore food..."}
+              placeholder={lang.code === 'vi' ? "Tìm kiếm địa điểm..." : "Search locations..."}
               style={styles.input}
               value={searchQuery}
               onChangeText={(t) => {
                 setSearchQuery(t);
-                const filtered = pois.filter(p => (p.name?.vi || "").toLowerCase().includes(t.toLowerCase()));
+                const filtered = pois.filter(p => (p.name?.vi || p.name || "").toLowerCase().includes(t.toLowerCase()));
                 setFilteredPois(filtered);
                 setIsDropdownVisible(t.length > 0);
               }}
@@ -184,10 +177,10 @@ export default function HomeScreen({ navigation }) {
                   setSearchQuery("");
                   mapRef.current?.animateToRegion({
                     latitude: item.latitude, longitude: item.longitude,
-                    latitudeDelta: 0.01, longitudeDelta: 0.01,
+                    latitudeDelta: 0.005, longitudeDelta: 0.005,
                   }, 1000);
                 }}>
-                  <Text style={styles.dropItemText}>{item.name?.vi}</Text>
+                  <Text style={styles.dropItemText}>{item.name?.vi || item.name}</Text>
                 </TouchableOpacity>
               )}
             />
@@ -195,7 +188,7 @@ export default function HomeScreen({ navigation }) {
         )}
       </View>
 
-      {/* MAP */}
+      {/* GOOGLE MAP */}
       <MapView 
         ref={mapRef} 
         style={styles.map} 
@@ -211,22 +204,23 @@ export default function HomeScreen({ navigation }) {
         ))}
       </MapView>
 
-      {/* INFO CARD */}
+      {/* BOTTOM INFO CARD */}
       <View style={styles.infoContainer}>
         <View style={styles.handle} />
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{padding: 25}}>
           {isTranslating ? (
-            <ActivityIndicator color="#FF6F00" />
+            <View style={{height: 100, justifyContent: 'center'}}><ActivityIndicator color="#FF6F00" /></View>
           ) : (
             <>
-              <View style={styles.badge}><Text style={styles.badgeText}>{selectedPoi?.type || 'FOOD'}</Text></View>
+              <View style={styles.badge}><Text style={styles.badgeText}>{selectedPoi?.type || 'LOCAL FOOD'}</Text></View>
               <Text style={styles.poiName}>{translatedData.name}</Text>
               <View style={styles.divider} />
               <Text style={styles.descLabel}>{lang.code === 'vi' ? "THÔNG TIN CHI TIẾT" : "DETAILS"}</Text>
               <Text style={styles.poiDesc}>{translatedData.desc}</Text>
+              
               <TouchableOpacity style={[styles.audioBtn, isSpeaking && styles.audioBtnActive]} onPress={handleToggleSpeech}>
                 <Text style={[styles.audioBtnText, isSpeaking && {color: '#fff'}]}>
-                  {isSpeaking ? "⏹ DỪNG THUYẾT MINH" : `🔊 NGHE (${lang.name.toUpperCase()})`}
+                  {isSpeaking ? "⏹ STOP SPEAKING" : `🔊 LISTEN (${lang.name.toUpperCase()})`}
                 </Text>
               </TouchableOpacity>
             </>
@@ -234,10 +228,9 @@ export default function HomeScreen({ navigation }) {
         </ScrollView>
       </View>
 
-      {/* MODAL SIDE MENU */}
-      <Modal visible={isMenuVisible} animationType="fade" transparent onRequestClose={() => setIsMenuVisible(false)}>
+      {/* SIDE MENU MODAL */}
+      <Modal visible={isMenuVisible} animationType="slide" transparent onRequestClose={() => setIsMenuVisible(false)}>
         <View style={styles.menuOverlay}>
-          <TouchableOpacity style={{flex:1}} onPress={() => setIsMenuVisible(false)} />
           <View style={styles.menuSideBar}>
             <View style={styles.menuHeader}>
               <View style={styles.avatarCircle}><Text style={styles.avatarText}>{userData.name.charAt(0)}</Text></View>
@@ -248,32 +241,20 @@ export default function HomeScreen({ navigation }) {
               <TouchableOpacity style={styles.menuItem} onPress={() => { setIsMenuVisible(false); navigation.navigate('Profile'); }}>
                 <Text style={styles.menuItemIcon}>👤</Text><Text style={styles.menuItemText}>Hồ sơ cá nhân</Text>
               </TouchableOpacity>
-              <View style={styles.menuDivider} />
               <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
                 <Text style={styles.menuItemIcon}>🚪</Text><Text style={[styles.menuItemText, {color: '#FF3B30'}]}>Đăng xuất</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.closeMenuBtn} onPress={() => setIsMenuVisible(false)}>
+                <Text style={{color: '#666'}}>Đóng menu</Text>
+              </TouchableOpacity>
             </View>
           </View>
+          <TouchableOpacity style={{flex:1}} onPress={() => setIsMenuVisible(false)} />
         </View>
       </Modal>
 
-      {/* MODAL ĐỔI MẬT KHẨU */}
-      <Modal visible={isPasswordModalVisible} animationType="fade" transparent onRequestClose={() => setIsPasswordModalVisible(false)}>
-        <View style={styles.modalBg}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Đổi mật khẩu</Text>
-            <TextInput style={styles.modalInput} placeholder="Mật khẩu cũ" secureTextEntry onChangeText={(t) => setPasswords({...passwords, old: t})} />
-            <TextInput style={styles.modalInput} placeholder="Mật khẩu mới" secureTextEntry onChangeText={(t) => setPasswords({...passwords, new: t})} />
-            <TextInput style={styles.modalInput} placeholder="Xác nhận mật khẩu mới" secureTextEntry onChangeText={(t) => setPasswords({...passwords, confirm: t})} />
-            <TouchableOpacity style={{marginTop: 15}} onPress={() => setIsPasswordModalVisible(false)}>
-              <Text style={{color: '#999', textAlign: 'center'}}>Hủy bỏ</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      {/* MODAL LANGUAGE */}
-      <Modal visible={isLangModalVisible} animationType="fade" transparent onRequestClose={() => setIsLangModalVisible(false)}>
+      {/* LANGUAGE SELECTION MODAL */}
+      <Modal visible={isLangModalVisible} animationType="fade" transparent>
         <View style={styles.modalBg}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>Chọn Ngôn Ngữ / Language</Text>
@@ -286,14 +267,11 @@ export default function HomeScreen({ navigation }) {
                   style={[styles.langGridItem, lang.code === item.code && styles.langGridItemActive]} 
                   onPress={() => { setLang(item); setIsLangModalVisible(false); Speech.stop(); }}
                 >
-                  <Text style={{fontSize: 35}}>{item.flag}</Text>
+                  <Text style={{fontSize: 30}}>{item.flag}</Text>
                   <Text style={styles.langNameText}>{item.name}</Text>
                 </TouchableOpacity>
               )}
             />
-            <TouchableOpacity style={styles.closeBtn} onPress={() => setIsLangModalVisible(false)}>
-              <Text style={{color: '#fff', fontWeight: 'bold'}}>ĐÓNG</Text>
-            </TouchableOpacity>
           </View>
         </View>
       </Modal>
@@ -302,53 +280,46 @@ export default function HomeScreen({ navigation }) {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#F8F9FA" },
+  container: { flex: 1, backgroundColor: "#fff" },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   searchSection: { position: 'absolute', top: 50, left: 15, right: 15, zIndex: 10 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
-  searchBar: { 
-    flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 20, 
-    height: 50, alignItems: 'center', paddingHorizontal: 15, marginHorizontal: 10,
-    elevation: 8, shadowColor: "#000", shadowOpacity: 0.1, shadowRadius: 10
-  },
+  searchBar: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25, height: 50, alignItems: 'center', paddingHorizontal: 20, marginHorizontal: 10, elevation: 10 },
   input: { flex: 1, fontSize: 14 },
-  roundBtn: { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 8 },
-  dropdown: { backgroundColor: '#fff', borderRadius: 15, marginTop: 10, elevation: 5, maxHeight: 180 },
+  roundBtn: { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10 },
+  dropdown: { backgroundColor: '#fff', borderRadius: 15, marginTop: 10, elevation: 10, maxHeight: 200 },
   dropItem: { padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
-  dropItemText: { fontWeight: '500', color: '#333' },
-  map: { width: width, height: height * 0.6 },
-  customMarker: { backgroundColor: '#fff', padding: 6, borderRadius: 20, borderWidth: 2, borderColor: '#FF6F00', elevation: 5 },
-  activeMarker: { backgroundColor: '#FF6F00', borderColor: '#fff' },
-  infoContainer: { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 35, borderTopRightRadius: 35, marginTop: -40, elevation: 20 },
-  handle: { width: 40, height: 5, backgroundColor: '#E0E0E0', borderRadius: 5, alignSelf: 'center', marginTop: 12 },
-  badge: { backgroundColor: '#FFF3E0', alignSelf: 'flex-start', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, marginBottom: 8 },
+  dropItemText: { fontWeight: '500' },
+  map: { width: width, height: height * 0.65 },
+  customMarker: { backgroundColor: '#fff', padding: 5, borderRadius: 20, borderWidth: 2, borderColor: '#FF6F00' },
+  activeMarker: { backgroundColor: '#FF6F00' },
+  infoContainer: { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30, elevation: 25 },
+  handle: { width: 40, height: 5, backgroundColor: '#EEE', borderRadius: 5, alignSelf: 'center', marginTop: 10 },
+  badge: { backgroundColor: '#FFF3E0', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8, marginBottom: 5 },
   badgeText: { color: '#FF6F00', fontSize: 10, fontWeight: 'bold' },
-  poiName: { fontSize: 24, fontWeight: '800', color: '#1A1A1A' },
-  divider: { height: 1, backgroundColor: '#F5F5F5', marginVertical: 15 },
-  descLabel: { fontSize: 11, fontWeight: 'bold', color: '#999', marginBottom: 5, letterSpacing: 1 },
-  poiDesc: { fontSize: 16, color: '#444', lineHeight: 24, marginBottom: 25 },
-  audioBtn: { backgroundColor: '#FFF3E0', padding: 18, borderRadius: 20, alignItems: 'center', borderWidth: 1, borderColor: '#FF6F00' },
+  poiName: { fontSize: 22, fontWeight: 'bold', color: '#333' },
+  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 15 },
+  descLabel: { fontSize: 10, color: '#999', marginBottom: 5, fontWeight: 'bold' },
+  poiDesc: { fontSize: 15, color: '#555', lineHeight: 22, marginBottom: 20 },
+  audioBtn: { backgroundColor: '#FFF3E0', padding: 15, borderRadius: 15, alignItems: 'center', borderWidth: 1, borderColor: '#FF6F00' },
   audioBtnActive: { backgroundColor: '#FF6F00' },
   audioBtnText: { color: '#FF6F00', fontWeight: 'bold' },
   menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row' },
-  menuSideBar: { width: width * 0.75, backgroundColor: '#fff', height: '100%', paddingTop: 60 },
-  menuHeader: { padding: 25, borderBottomWidth: 1, borderBottomColor: '#F0F0F0', alignItems: 'center' },
-  avatarCircle: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FF6F00', justifyContent: 'center', alignItems: 'center', marginBottom: 10 },
-  avatarText: { color: '#fff', fontSize: 30, fontWeight: 'bold' },
-  menuName: { fontSize: 18, fontWeight: 'bold', color: '#333' },
-  menuEmail: { fontSize: 12, color: '#999' },
+  menuSideBar: { width: width * 0.75, backgroundColor: '#fff', height: '100%', elevation: 20 },
+  menuHeader: { padding: 40, paddingTop: 60, backgroundColor: '#FFF3E0', alignItems: 'center' },
+  avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FF6F00', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
+  avatarText: { color: '#fff', fontSize: 35, fontWeight: 'bold' },
+  menuName: { fontSize: 20, fontWeight: 'bold' },
+  menuEmail: { color: '#666', fontSize: 12 },
   menuBody: { padding: 20 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 15 },
-  menuItemIcon: { fontSize: 20, marginRight: 15, width: 30 },
-  menuItemText: { fontSize: 16, fontWeight: '500', color: '#444' },
-  menuDivider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 10 },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', borderRadius: 30, padding: 20, width: '90%' },
-  modalTitle: { textAlign: 'center', fontWeight: 'bold', marginBottom: 20, fontSize: 18, color: '#333' },
-  langGridItem: { flex: 1, alignItems: 'center', padding: 15, margin: 5, borderRadius: 20, borderWidth: 1, borderColor: '#EEE' },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
+  menuItemIcon: { fontSize: 20, marginRight: 15 },
+  menuItemText: { fontSize: 16, fontWeight: '500' },
+  closeMenuBtn: { marginTop: 30, alignSelf: 'center' },
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: '#fff', borderRadius: 25, padding: 20, width: '85%', maxHeight: '70%' },
+  modalTitle: { textAlign: 'center', fontWeight: 'bold', marginBottom: 15, fontSize: 16 },
+  langGridItem: { flex: 1, alignItems: 'center', padding: 15, margin: 5, borderRadius: 15, borderWidth: 1, borderColor: '#EEE' },
   langGridItemActive: { backgroundColor: '#FFF3E0', borderColor: '#FF6F00' },
-  langNameText: { fontSize: 12, fontWeight: '600', marginTop: 5 },
-  closeBtn: { backgroundColor: '#333', padding: 15, borderRadius: 20, alignItems: 'center', marginTop: 15 },
-  modalInput: { backgroundColor: '#F5F5F5', borderRadius: 12, padding: 15, marginBottom: 15, fontSize: 14 },
-  confirmBtn: { backgroundColor: '#FF6F00', padding: 15, borderRadius: 12, alignItems: 'center', marginTop: 10 }
+  langNameText: { fontSize: 12, marginTop: 5, fontWeight: '500' }
 });
