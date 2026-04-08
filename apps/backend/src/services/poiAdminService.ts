@@ -1,7 +1,7 @@
 import { PoiType, Prisma } from '../generated/prisma/client';
 import prisma from '../lib/prisma';
 import ApiError from '../utils/ApiError';
-import { cleanupPoiAudioFiles } from './ttsService';
+import { cleanupPoiAudioFiles, enqueuePoiTtsGeneration } from './ttsService';
 import { removeCloudinaryImageByUrl } from './imageService';
 import { recordAdminAuditEvent } from './adminAuditService';
 
@@ -608,6 +608,16 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
       isPublished: updatedPoi.isPublished
     }
   });
+
+  // Auto-trigger TTS generation if description changed
+  if (description !== undefined) {
+    try {
+      await enqueuePoiTtsGeneration(poiId);
+    } catch (error) {
+      console.error('[POI Update] Failed to enqueue TTS generation', { poiId, error });
+      // Don't throw - TTS queueing failure should not block POI update
+    }
+  }
 
   return toAdminPoiRecord(updatedPoi);
 }
