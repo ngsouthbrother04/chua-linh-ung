@@ -3,12 +3,15 @@ import bcrypt from 'bcryptjs';
 import prisma from '../lib/prisma';
 import { PaymentProvider, PaymentStatus } from '../generated/prisma/client';
 
+export type UserRole = 'USER' | 'PARTNER' | 'ADMIN';
+
 export interface ClaimAuthResult {
   token: string;
   accessToken: string;
   tokenType: 'Bearer';
   expiresIn: number;
   method: 'claim_code';
+  role: UserRole;
   deviceId?: string;
   refreshToken: string;
   refreshExpiresIn: number;
@@ -61,6 +64,7 @@ export interface RefreshAuthResult {
   accessToken: string;
   tokenType: 'Bearer';
   expiresIn: number;
+  role: UserRole;
   refreshToken: string;
   refreshExpiresIn: number;
   deviceId?: string;
@@ -78,6 +82,7 @@ const TOKEN_SECRETS = process.env.AUTH_JWT_SECRETS
   : [TOKEN_SECRET];
 const CURRENT_KID = process.env.AUTH_JWT_KID ?? '1';
 const revokedAccessTokenJtis = new Map<string, number>();
+const revokedUserAccessAfterIat = new Map<string, number>();
 
 function base64UrlEncode(input: string): string {
   return Buffer.from(input)
@@ -115,11 +120,96 @@ function pruneRevokedAccessTokens(): void {
   }
 }
 
-function createRefreshToken(subject: string, sessionId?: string): { token: string; expiresIn: number; jti: string } {
+function toUserRole(value: unknown): UserRole {
+  if (value === 'ADMIN' || value === 'PARTNER' || value === 'USER') {
+    return value;
+  }
+
+  return 'USER';
+}
+
+function roleFromClaimCodeType(codeType?: string | null): UserRole {
+  if (!codeType) {
+    return 'USER';
+  }
+
+  const normalized = codeType.trim().toUpperCase();
+  if (normalized === 'ADMIN' || normalized === 'ADMIN_CODE') {
+    return 'ADMIN';
+  }
+
+  if (normalized === 'PARTNER' || normalized === 'PARTNER_CODE') {
+    return 'PARTNER';
+  }
+
+  return 'USER';
+}
+
+async function fetchPersistedUserRole(userId: string): Promise<UserRole | null> {
+  try {
+    const rows = await prisma.$queryRaw<Array<{ role: string }>>`
+      SELECT role::text AS role
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+
+    if (!rows[0]) {
+      return null;
+    }
+
+    return toUserRole(rows[0].role);
+  } catch {
+    return null;
+  }
+}
+
+async function resolveUserRole(input: {
+  userId: string;
+  claimCodeId?: string | null;
+  fallbackRole?: UserRole;
+}): Promise<UserRole> {
+  const persistedRole = await fetchPersistedUserRole(input.userId);
+  if (persistedRole) {
+    return persistedRole;
+  }
+
+  if (input.claimCodeId) {
+    const claimCode = await prisma.claimCode.findUnique({
+      where: { id: input.claimCodeId },
+      select: { codeType: true }
+    });
+
+    if (claimCode?.codeType) {
+      return roleFromClaimCodeType(claimCode.codeType);
+    }
+  }
+
+  return input.fallbackRole ?? 'USER';
+}
+
+async function syncUserRoleByClaimCode(userId: string, claimCodeId?: string | null): Promise<UserRole> {
+  const role = await resolveUserRole({ userId, claimCodeId });
+
+  try {
+    await prisma.$executeRaw`
+      UPDATE users
+      SET role = ${role}
+      WHERE id = ${userId}
+    `;
+  } catch {
+    // Ignore during rollout when role column is not yet deployed.
+  }
+
+  return role;
+}
+
+function createRefreshToken(subject: string, role: UserRole, sessionId?: string): { token: string; expiresIn: number; jti: string } {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jti = crypto.randomUUID();
   const payload = {
     sub: subject,
+    role,
     iat: nowSeconds,
     exp: nowSeconds + REFRESH_TOKEN_TTL_SECONDS,
     jti,
@@ -185,11 +275,12 @@ function toSafeClaimCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
 }
 
-export function createAuthToken(subject: string, sessionId?: string): { token: string; expiresIn: number; jti: string } {
+export function createAuthToken(subject: string, sessionId?: string, role: UserRole = 'USER'): { token: string; expiresIn: number; jti: string } {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jti = crypto.randomUUID();
   const payload = {
     sub: subject,
+    role,
     iat: nowSeconds,
     exp: nowSeconds + TOKEN_TTL_SECONDS,
     jti,
@@ -206,12 +297,13 @@ export function createAuthToken(subject: string, sessionId?: string): { token: s
 
 async function issueAuthPair(input: {
   subject: string;
+  role: UserRole;
   deviceId?: string;
   sessionId?: string;
 }): Promise<ClaimAuthResult> {
   const sessionId = input.sessionId ?? crypto.randomUUID();
-  const access = createAuthToken(input.subject, sessionId);
-  const refresh = createRefreshToken(input.subject, sessionId);
+  const access = createAuthToken(input.subject, sessionId, input.role);
+  const refresh = createRefreshToken(input.subject, input.role, sessionId);
 
   return {
     token: access.token,
@@ -219,6 +311,7 @@ async function issueAuthPair(input: {
     tokenType: 'Bearer',
     expiresIn: access.expiresIn,
     method: 'claim_code',
+    role: input.role,
     deviceId: input.deviceId,
     refreshToken: refresh.token,
     refreshExpiresIn: refresh.expiresIn,
@@ -241,7 +334,7 @@ async function seedDefaultClaimCodes(): Promise<void> {
 
 export async function registerUser(input: any): Promise<ClaimAuthResult> {
   const { email, password, fullName, deviceId } = input;
-  
+
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
     throw new Error('EMAIL_EXISTS');
@@ -259,8 +352,15 @@ export async function registerUser(input: any): Promise<ClaimAuthResult> {
     }
   });
 
+  const role = await resolveUserRole({
+    userId: user.id,
+    claimCodeId: user.claimCodeId,
+    fallbackRole: 'USER'
+  });
+
   return issueAuthPair({
     subject: user.id,
+    role,
     deviceId
   });
 }
@@ -286,8 +386,15 @@ export async function loginUser(input: any): Promise<ClaimAuthResult> {
     });
   }
 
+  const role = await resolveUserRole({
+    userId: user.id,
+    claimCodeId: user.claimCodeId,
+    fallbackRole: 'USER'
+  });
+
   return issueAuthPair({
     subject: user.id,
+    role,
     deviceId
   });
 }
@@ -317,12 +424,17 @@ export async function redeemClaimCode(userId: string, claimCode: string): Promis
     throw new Error('CLAIM_CODE_NOT_FOUND_OR_USED');
   }
 
-  const codeRecord = await prisma.claimCode.findUnique({ where: { code: normalizedCode }});
-  
+  const codeRecord = await prisma.claimCode.findUnique({
+    where: { code: normalizedCode },
+    select: { id: true, codeType: true }
+  });
+
   await prisma.user.update({
     where: { id: userId },
     data: { claimCodeId: codeRecord?.id }
   });
+
+  await syncUserRoleByClaimCode(userId, codeRecord?.id);
 
   return { success: true, message: 'Nhập mã thành công. Bạn đã trở thành hội viên Premium.' };
 }
@@ -393,6 +505,7 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
     if (existingPayment.status === 'SUCCEEDED') {
       const pair = await issueAuthPair({
         subject: existingPayment.userId || `payment:${existingPayment.transactionId}`,
+        role: existingPayment.userId ? await resolveUserRole({ userId: existingPayment.userId, fallbackRole: 'USER' }) : 'USER',
         deviceId: input.deviceId ?? `payment:${existingPayment.transactionId}`
       });
       return {
@@ -462,6 +575,7 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
 
   const issued = await issueAuthPair({
     subject: updated.userId || `payment:${updated.transactionId}`,
+    role: updated.userId ? await resolveUserRole({ userId: updated.userId, fallbackRole: 'USER' }) : 'USER',
     deviceId: input.deviceId ?? `payment:${updated.transactionId}`
   });
 
@@ -492,12 +606,21 @@ export async function refreshAuthSession(rawToken: string): Promise<RefreshAuthR
   }
 
   const subject = typeof payload.sub === 'string' && payload.sub ? payload.sub : 'refresh-token';
+  const roleFromToken = toUserRole(payload.role);
   if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
     throw new Error('INVALID_REFRESH_TOKEN');
   }
 
+  const resolvedRole = subject.startsWith('payment:')
+    ? roleFromToken
+    : await resolveUserRole({
+        userId: subject,
+        fallbackRole: roleFromToken
+      });
+
   return issueAuthPair({
     subject,
+    role: resolvedRole,
     deviceId: typeof payload.sid === 'string' ? payload.sid : undefined,
     sessionId: typeof payload.sid === 'string' ? payload.sid : undefined
   });
@@ -515,6 +638,35 @@ export async function revokeAuthSessionByAccessToken(token: string): Promise<voi
   revokedAccessTokenJtis.set(jti, expiresAt);
 }
 
+export async function revokeAllUserAccessTokens(userId: string): Promise<void> {
+  const normalized = typeof userId === 'string' ? userId.trim() : '';
+  if (!normalized) {
+    throw new Error('INVALID_USER_ID');
+  }
+
+  const nowSeconds = Math.floor(Date.now() / 1000);
+  revokedUserAccessAfterIat.set(normalized, nowSeconds);
+
+  try {
+    await prisma.$executeRaw`
+      UPDATE users
+      SET token_invalid_before = NOW(), updated_at = NOW()
+      WHERE id = ${normalized}
+    `;
+  } catch {
+    // Keep in-memory fallback for rollout windows where DB schema is not fully migrated.
+  }
+}
+
+export async function getCurrentUserRole(userId: string): Promise<UserRole | null> {
+  const normalized = typeof userId === 'string' ? userId.trim() : '';
+  if (!normalized) {
+    return null;
+  }
+
+  return fetchPersistedUserRole(normalized);
+}
+
 export async function isAccessTokenSessionActive(token: string): Promise<boolean> {
   try {
     const payload = verifyJwt(token);
@@ -525,7 +677,38 @@ export async function isAccessTokenSessionActive(token: string): Promise<boolean
     }
 
     pruneRevokedAccessTokens();
-    return !revokedAccessTokenJtis.has(jti);
+    if (revokedAccessTokenJtis.has(jti)) {
+      return false;
+    }
+
+    const subject = typeof payload.sub === 'string' ? payload.sub : '';
+    const issuedAt = typeof payload.iat === 'number' ? payload.iat : 0;
+    if (!subject || issuedAt <= 0) {
+      return true;
+    }
+
+    try {
+      const rows = await prisma.$queryRaw<Array<{ cutoff: number | null }>>`
+        SELECT EXTRACT(EPOCH FROM token_invalid_before)::bigint AS cutoff
+        FROM users
+        WHERE id = ${subject}
+        LIMIT 1
+      `;
+
+      const dbCutoff = rows[0]?.cutoff;
+      if (typeof dbCutoff === 'number' && issuedAt <= dbCutoff) {
+        return false;
+      }
+    } catch {
+      // Ignore DB lookup failures and fallback to in-memory cutoff below.
+    }
+
+    const revokeAfter = revokedUserAccessAfterIat.get(subject);
+    if (typeof revokeAfter === 'number' && issuedAt <= revokeAfter) {
+      return false;
+    }
+
+    return true;
   } catch {
     return false;
   }

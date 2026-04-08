@@ -7,6 +7,15 @@ import ApiError from '../../utils/ApiError';
 
 const router = Router();
 
+function requireUserId(req: AuthRequest): string {
+  const userId = req.user?.sub;
+  if (!userId) {
+    throw new ApiError(401, 'Token rỗng hoặc không hợp lệ.');
+  }
+
+  return userId;
+}
+
 /**
  * GET /api/v1/sync/manifest
  * @summary Get sync manifest
@@ -22,7 +31,8 @@ router.get(
   '/manifest',
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    const isPremium = await isUserPremium(req.user?.sub);
+    const userId = requireUserId(req);
+    const isPremium = await isUserPremium(userId);
     const manifest = await getSyncManifest(isPremium);
     return res.status(200).json(manifest);
   })
@@ -45,7 +55,8 @@ router.get(
   '/full',
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    const isPremium = await isUserPremium(req.user?.sub);
+    const userId = requireUserId(req);
+    const isPremium = await isUserPremium(userId);
 
     const requestedVersionRaw = typeof req.query.version === 'string' ? req.query.version : undefined;
     const requestedVersion = requestedVersionRaw ? Number(requestedVersionRaw) : undefined;
@@ -93,7 +104,8 @@ router.post(
   '/incremental',
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    const isPremium = await isUserPremium(req.user?.sub);
+    const userId = requireUserId(req);
+    const isPremium = await isUserPremium(userId);
     const { fromVersion } = req.body;
 
     if (fromVersion === undefined || !Number.isInteger(fromVersion)) {

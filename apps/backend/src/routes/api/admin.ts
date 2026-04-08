@@ -2,6 +2,7 @@ import { type RequestHandler, Router } from 'express';
 import multer from 'multer';
 import asyncHandler from '../../utils/asyncHandler';
 import ApiError from '../../utils/ApiError';
+import { getCurrentUserRole, isAccessTokenSessionActive, verifyJwt } from '../../services/authService';
 import {
   createAdminPoi,
   createAdminTour,
@@ -18,6 +19,7 @@ import {
 } from '../../services/poiAdminService';
 import { enqueuePoiTtsGeneration, getTtsQueueStatus, validateTtsRuntimeConfig } from '../../services/ttsService';
 import { uploadPoiImage, uploadTourImage } from '../../services/imageService';
+import { assignAdminUserRole, listAdminUsers, revokeAdminUserRole } from '../../services/adminUserRoleService';
 
 const router = Router();
 const imageUpload = multer({
@@ -27,16 +29,27 @@ const imageUpload = multer({
   }
 });
 
-function assertAdminAccess(headerValue: unknown): void {
-  const requiredAdminToken = process.env.ADMIN_API_KEY;
-  if (!requiredAdminToken) {
-    return;
-  }
+async function assertAdminAccess(req: { headers: Record<string, unknown> }): Promise<{ actorId: string }> {
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
 
-  const providedToken = typeof headerValue === 'string' ? headerValue : '';
-  if (providedToken !== requiredAdminToken) {
+  if (!accessToken) {
     throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
   }
+
+  const payload = verifyJwt(accessToken) as { sub?: string; role?: string };
+  const isActive = await isAccessTokenSessionActive(accessToken);
+  if (!isActive || payload.role !== 'ADMIN' || typeof payload.sub !== 'string' || !payload.sub.trim()) {
+    throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
+  }
+
+  const actorId = payload.sub.trim();
+  const currentRole = await getCurrentUserRole(actorId);
+  if (currentRole && currentRole !== 'ADMIN') {
+    throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
+  }
+
+  return { actorId };
 }
 
 function getAdminActionContext(req: { headers: Record<string, unknown>; body?: unknown }) {
@@ -74,9 +87,8 @@ const handleImageUpload: RequestHandler = (req, res, next) => {
  * @summary Queue TTS generation for POI
  * @description Enqueue server-side TTS jobs for all available languages of a POI.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @return {object} 202 - Queue accepted
  * @return {object} 400 - Missing POI id
  * @return {object} 403 - Forbidden
@@ -86,7 +98,7 @@ const handleImageUpload: RequestHandler = (req, res, next) => {
 router.post(
   '/pois/:id/audio/generate',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -106,9 +118,8 @@ router.post(
  * @summary Upload POI image
  * @description Upload image file for a POI to image storage provider.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {file} image.formData.required - Image file
  * @return {object} 200 - Upload successful
  * @return {object} 400 - Invalid file or missing input
@@ -120,7 +131,7 @@ router.post(
   '/pois/:id/image/upload',
   handleImageUpload,
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -148,9 +159,8 @@ router.post(
  * @summary Upload tour image
  * @description Upload image file for a tour to image storage provider.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {file} image.formData.required - Image file
  * @return {object} 200 - Upload successful
  * @return {object} 400 - Invalid file or missing input
@@ -162,7 +172,7 @@ router.post(
   '/tours/:id/image/upload',
   handleImageUpload,
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
@@ -190,8 +200,7 @@ router.post(
  * @summary Create POI
  * @description Create a draft POI record with multilingual payload.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @param {object} request.body.required - POI create payload
  * @return {object} 201 - POI created
  * @return {object} 400 - Invalid payload
@@ -202,7 +211,7 @@ router.post(
 router.post(
   '/pois',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const result = await createAdminPoi(req.body ?? {}, getAdminActionContext(req as never));
     return res.status(201).json({
@@ -217,9 +226,8 @@ router.post(
  * @summary Publish POI content
  * @description Publish POI and enqueue TTS generation.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {object} request.body - Optional action metadata
  * @param {string} request.body.reason - Publish reason
  * @return {object} 200 - Publish successful
@@ -231,7 +239,7 @@ router.post(
 router.post(
   '/pois/:id/publish',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -254,8 +262,7 @@ router.post(
  * @summary List POIs for admin
  * @description Retrieve POIs including unpublished records for CMS usage.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @return {object} 200 - POI list
  * @return {object} 403 - Forbidden
  * @return {object} 500 - Internal Server Error
@@ -264,7 +271,7 @@ router.post(
 router.get(
   '/pois',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const items = await listAdminPois();
     return res.status(200).json({
@@ -279,9 +286,8 @@ router.get(
  * @summary Get POI detail for admin
  * @description Retrieve a single POI record including admin-only fields.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @return {object} 200 - POI detail
  * @return {object} 400 - Missing POI id
  * @return {object} 403 - Forbidden
@@ -292,7 +298,7 @@ router.get(
 router.get(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -311,9 +317,8 @@ router.get(
  * @summary Update POI
  * @description Update POI fields in draft/admin context.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {object} request.body.required - POI update payload
  * @return {object} 200 - POI updated
  * @return {object} 400 - Invalid payload or missing id
@@ -325,7 +330,7 @@ router.get(
 router.put(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -345,9 +350,8 @@ router.put(
  * @summary Soft delete POI
  * @description Soft-delete POI and hide from sync outputs.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - POI identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {object} request.body - Optional action metadata
  * @param {string} request.body.reason - Delete reason
  * @return {object} 200 - POI deleted
@@ -360,7 +364,7 @@ router.put(
 router.delete(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
@@ -380,8 +384,7 @@ router.delete(
  * @summary Create tour
  * @description Create a tour with ordered POI references.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @param {object} request.body.required - Tour create payload
  * @return {object} 201 - Tour created
  * @return {object} 400 - Invalid payload
@@ -392,7 +395,7 @@ router.delete(
 router.post(
   '/tours',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const result = await createAdminTour(req.body ?? {}, getAdminActionContext(req as never));
     return res.status(201).json({
@@ -407,9 +410,8 @@ router.post(
  * @summary Get tour detail for admin
  * @description Retrieve a single tour record including admin fields.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @return {object} 200 - Tour detail
  * @return {object} 400 - Missing tour id
  * @return {object} 403 - Forbidden
@@ -420,7 +422,7 @@ router.post(
 router.get(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
@@ -439,9 +441,8 @@ router.get(
  * @summary Update tour
  * @description Update tour metadata and ordered POI references.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {object} request.body.required - Tour update payload
  * @return {object} 200 - Tour updated
  * @return {object} 400 - Invalid payload or missing id
@@ -453,7 +454,7 @@ router.get(
 router.put(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
@@ -473,9 +474,8 @@ router.put(
  * @summary Soft delete tour
  * @description Soft-delete a tour from admin CMS.
  * @tags Admin
- * @security adminApiKey
+ * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
- * @param {string} x-admin-api-key.header - Admin API key
  * @param {object} request.body - Optional action metadata
  * @param {string} request.body.reason - Delete reason
  * @return {object} 200 - Tour deleted
@@ -488,7 +488,7 @@ router.put(
 router.delete(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
@@ -508,8 +508,7 @@ router.delete(
  * @summary Cleanup retained soft-deleted POIs
  * @description Run dry-run or execute cleanup for expired soft-deleted POI data and media.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @param {object} request.body - Cleanup payload
  * @param {boolean} request.body.dryRun - Dry-run mode
  * @param {string} request.body.reason - Cleanup reason
@@ -521,7 +520,7 @@ router.delete(
 router.post(
   '/maintenance/pois/soft-delete-cleanup',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const dryRun = Boolean((req.body as Record<string, unknown> | undefined)?.dryRun);
     const result = await purgeSoftDeletedPois({
@@ -541,8 +540,7 @@ router.post(
  * @summary Invalidate sync manifest
  * @description Force clients to re-evaluate sync version.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @return {object} 200 - Manifest invalidated
  * @return {object} 403 - Forbidden
  * @return {object} 500 - Internal Server Error
@@ -551,7 +549,7 @@ router.post(
 router.post(
   '/sync/invalidate',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const result = await invalidateSyncManifest();
     return res.status(200).json({
@@ -566,8 +564,7 @@ router.post(
  * @summary Get TTS queue status
  * @description Return queue metrics for TTS processing.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @return {object} 200 - Queue status
  * @return {object} 403 - Forbidden
  * @return {object} 500 - Internal Server Error
@@ -576,7 +573,7 @@ router.post(
 router.get(
   '/tts/queue/status',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const status = await getTtsQueueStatus();
     return res.status(200).json(status);
@@ -588,8 +585,7 @@ router.get(
  * @summary Validate TTS runtime configuration
  * @description Return runtime validation diagnostics for TTS provider setup.
  * @tags Admin
- * @security adminApiKey
- * @param {string} x-admin-api-key.header - Admin API key
+ * @security bearerAuth
  * @return {object} 200 - Configuration valid
  * @return {object} 403 - Forbidden
  * @return {object} 500 - Configuration invalid or internal error
@@ -598,10 +594,125 @@ router.get(
 router.get(
   '/tts/config/validate',
   asyncHandler(async (req, res) => {
-    assertAdminAccess(req.headers['x-admin-api-key']);
+    await assertAdminAccess(req);
 
     const validation = validateTtsRuntimeConfig();
     return res.status(validation.ok ? 200 : 500).json(validation);
+  })
+);
+
+/**
+ * GET /api/v1/admin/users
+ * @summary List users for admin
+ * @description Retrieve users and optionally filter by role.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} role.query - USER | PARTNER | ADMIN
+ * @return {object} 200 - User list
+ * @return {object} 400 - Invalid role filter
+ * @return {object} 403 - Forbidden
+ * @return {object} 500 - Internal Server Error
+ */
+router.get(
+  '/users',
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const roleFilter = typeof req.query.role === 'string' ? req.query.role : undefined;
+    const items = await listAdminUsers({ role: roleFilter });
+    return res.status(200).json({
+      items,
+      total: items.length
+    });
+  })
+);
+
+/**
+ * POST /api/v1/admin/users/:id/role
+ * @summary Assign role for a user
+ * @description Assign USER/PARTNER/ADMIN role to a target user.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} id.path.required - User identifier
+ * @param {object} request.body.required - Role update payload
+ * @param {string} request.body.role.required - USER | PARTNER | ADMIN
+ * @param {string} request.body.reason - Optional reason
+ * @return {object} 200 - Role updated
+ * @return {object} 400 - Invalid payload
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - User not found
+ * @return {object} 409 - Guardrail violation
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  '/users/:id/role',
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const targetUserId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const nextRole = typeof req.body?.role === 'string' ? req.body.role : '';
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+
+    if (!targetUserId) {
+      throw new ApiError(400, 'Thiếu user id cần cập nhật role.');
+    }
+
+    if (!nextRole) {
+      throw new ApiError(400, 'Thiếu role cần cập nhật.');
+    }
+
+    const result = await assignAdminUserRole({
+      actorId: auth.actorId,
+      targetUserId,
+      nextRole,
+      reason
+    });
+
+    return res.status(200).json({
+      message: 'Cập nhật role thành công.',
+      ...result
+    });
+  })
+);
+
+/**
+ * POST /api/v1/admin/users/:id/role/revoke
+ * @summary Revoke elevated role
+ * @description Revoke target user role down to USER.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} id.path.required - User identifier
+ * @param {object} request.body - Revoke payload
+ * @param {string} request.body.reason - Optional reason
+ * @return {object} 200 - Role revoked to USER
+ * @return {object} 400 - Invalid input
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - User not found
+ * @return {object} 409 - Guardrail violation
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  '/users/:id/role/revoke',
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const targetUserId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+
+    if (!targetUserId) {
+      throw new ApiError(400, 'Thiếu user id cần thu hồi role.');
+    }
+
+    const result = await revokeAdminUserRole({
+      actorId: auth.actorId,
+      targetUserId,
+      reason
+    });
+
+    return res.status(200).json({
+      message: 'Đã thu hồi role về USER.',
+      ...result
+    });
   })
 );
 

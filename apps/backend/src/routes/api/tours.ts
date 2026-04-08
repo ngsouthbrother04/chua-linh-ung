@@ -3,8 +3,18 @@ import { getPublicTours, getPublicTourById } from '../../services/tourPublicServ
 import { isUserPremium } from '../../services/authService';
 import { requireAuth, AuthRequest } from '../../middlewares/authMiddleware';
 import asyncHandler from '../../utils/asyncHandler';
+import ApiError from '../../utils/ApiError';
 
 const router = Router();
+
+function requireUserId(req: AuthRequest): string {
+  const userId = req.user?.sub;
+  if (!userId) {
+    throw new ApiError(401, 'Token rỗng hoặc không hợp lệ.');
+  }
+
+  return userId;
+}
 
 /**
  * GET /api/v1/tours
@@ -21,7 +31,8 @@ router.get(
   '/',
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    const isPremium = await isUserPremium(req.user?.sub);
+    const userId = requireUserId(req);
+    const isPremium = await isUserPremium(userId);
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 20;
 
@@ -48,7 +59,8 @@ router.get(
   '/:id',
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
-    const isPremium = await isUserPremium(req.user?.sub);
+    const userId = requireUserId(req);
+    const isPremium = await isUserPremium(userId);
     const id = String(req.params.id);
 
     const data = await getPublicTourById(id, isPremium);

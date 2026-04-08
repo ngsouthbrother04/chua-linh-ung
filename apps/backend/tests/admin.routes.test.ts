@@ -30,6 +30,18 @@ vi.mock('../src/services/poiAdminService', () => ({
   updateAdminTour: vi.fn()
 }));
 
+vi.mock('../src/services/adminUserRoleService', () => ({
+  listAdminUsers: vi.fn(),
+  assignAdminUserRole: vi.fn(),
+  revokeAdminUserRole: vi.fn()
+}));
+
+vi.mock('../src/services/authService', () => ({
+  verifyJwt: vi.fn(),
+  isAccessTokenSessionActive: vi.fn(),
+  getCurrentUserRole: vi.fn()
+}));
+
 import { enqueuePoiTtsGeneration, getTtsQueueStatus, validateTtsRuntimeConfig } from '../src/services/ttsService';
 import { uploadPoiImage, uploadTourImage } from '../src/services/imageService';
 import {
@@ -46,6 +58,10 @@ import {
   updateAdminPoi,
   updateAdminTour
 } from '../src/services/poiAdminService';
+import { assignAdminUserRole, listAdminUsers, revokeAdminUserRole } from '../src/services/adminUserRoleService';
+import { getCurrentUserRole, isAccessTokenSessionActive, verifyJwt } from '../src/services/authService';
+
+const ADMIN_AUTH_HEADER = 'Bearer admin-token';
 
 function createApp() {
   const app = express();
@@ -59,7 +75,9 @@ function createApp() {
 describe('ADMIN routes', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    delete process.env.ADMIN_API_KEY;
+    vi.mocked(verifyJwt).mockReturnValue({ sub: 'admin-1', role: 'ADMIN' });
+    vi.mocked(isAccessTokenSessionActive).mockResolvedValue(true);
+    vi.mocked(getCurrentUserRole).mockResolvedValue('ADMIN');
   });
 
   it('POST /api/v1/admin/pois/:id/audio/generate should enqueue tts jobs', async () => {
@@ -73,7 +91,10 @@ describe('ADMIN routes', () => {
       mode: 'in-memory'
     });
 
-    const res = await request(app).post('/api/v1/admin/pois/poi-1/audio/generate').send({});
+    const res = await request(app)
+      .post('/api/v1/admin/pois/poi-1/audio/generate')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({});
 
     expect(res.status).toBe(202);
     expect(res.body.poiId).toBe('poi-1');
@@ -81,13 +102,13 @@ describe('ADMIN routes', () => {
     expect(enqueuePoiTtsGeneration).toHaveBeenCalledWith('poi-1');
   });
 
-  it('POST /api/v1/admin/pois/:id/audio/generate should return 403 with wrong admin token', async () => {
-    process.env.ADMIN_API_KEY = 'secret-admin';
+  it('POST /api/v1/admin/pois/:id/audio/generate should return 403 with non-admin role', async () => {
     const app = createApp();
+    vi.mocked(verifyJwt).mockReturnValue({ sub: 'user-1', role: 'USER' });
 
     const res = await request(app)
       .post('/api/v1/admin/pois/poi-1/audio/generate')
-      .set('x-admin-api-key', 'wrong-token')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .send({});
 
     expect(res.status).toBe(403);
@@ -107,7 +128,7 @@ describe('ADMIN routes', () => {
       delayed: 0
     });
 
-    const res = await request(app).get('/api/v1/admin/tts/queue/status');
+    const res = await request(app).get('/api/v1/admin/tts/queue/status').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.waiting).toBe(2);
@@ -125,7 +146,7 @@ describe('ADMIN routes', () => {
       warnings: []
     });
 
-    const res = await request(app).get('/api/v1/admin/tts/config/validate');
+    const res = await request(app).get('/api/v1/admin/tts/config/validate').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
@@ -142,7 +163,7 @@ describe('ADMIN routes', () => {
       warnings: []
     });
 
-    const res = await request(app).get('/api/v1/admin/tts/config/validate');
+    const res = await request(app).get('/api/v1/admin/tts/config/validate').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(500);
     expect(res.body.ok).toBe(false);
@@ -160,6 +181,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .post('/api/v1/admin/pois/poi-1/image/upload')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .attach('image', Buffer.from('fake-image-binary'), {
         filename: 'poi-1.jpg',
         contentType: 'image/jpeg'
@@ -175,20 +197,21 @@ describe('ADMIN routes', () => {
   it('POST /api/v1/admin/pois/:id/image/upload should return 400 when missing image file', async () => {
     const app = createApp();
 
-    const res = await request(app).post('/api/v1/admin/pois/poi-1/image/upload').send({});
+    const res = await request(app)
+      .post('/api/v1/admin/pois/poi-1/image/upload')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({});
 
     expect(res.status).toBe(400);
     expect(res.body.message).toContain('Thiếu file ảnh');
     expect(uploadPoiImage).not.toHaveBeenCalled();
   });
 
-  it('POST /api/v1/admin/pois/:id/image/upload should return 403 with wrong admin token', async () => {
-    process.env.ADMIN_API_KEY = 'secret-admin';
+  it('POST /api/v1/admin/pois/:id/image/upload should return 403 when Authorization is missing', async () => {
     const app = createApp();
 
     const res = await request(app)
       .post('/api/v1/admin/pois/poi-1/image/upload')
-      .set('x-admin-api-key', 'wrong-token')
       .attach('image', Buffer.from('fake-image-binary'), {
         filename: 'poi-1.jpg',
         contentType: 'image/jpeg'
@@ -210,6 +233,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .post('/api/v1/admin/tours/tour-1/image/upload')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .attach('image', Buffer.from('fake-image-binary'), {
         filename: 'tour-1.jpg',
         contentType: 'image/jpeg'
@@ -242,7 +266,7 @@ describe('ADMIN routes', () => {
       updatedAt: new Date('2026-03-25T00:00:00Z').toISOString()
     } as never);
 
-    const res = await request(app).post('/api/v1/admin/pois').send({
+    const res = await request(app).post('/api/v1/admin/pois').set('Authorization', ADMIN_AUTH_HEADER).send({
       name: { vi: 'Phở Thìn' },
       description: { vi: 'Nổi tiếng' },
       latitude: 21.01,
@@ -283,7 +307,10 @@ describe('ADMIN routes', () => {
       mode: 'in-memory'
     });
 
-    const res = await request(app).post('/api/v1/admin/pois/poi-1/publish').send({});
+    const res = await request(app)
+      .post('/api/v1/admin/pois/poi-1/publish')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({});
 
     expect(res.status).toBe(200);
     expect(res.body.isPublished).toBe(true);
@@ -320,7 +347,7 @@ describe('ADMIN routes', () => {
       } as never
     ]);
 
-    const res = await request(app).get('/api/v1/admin/pois');
+    const res = await request(app).get('/api/v1/admin/pois').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.items).toHaveLength(1);
@@ -347,7 +374,7 @@ describe('ADMIN routes', () => {
       updatedAt: new Date('2026-03-25T00:00:00Z').toISOString()
     } as never);
 
-    const res = await request(app).get('/api/v1/admin/pois/poi-1');
+    const res = await request(app).get('/api/v1/admin/pois/poi-1').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('poi-1');
@@ -376,6 +403,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .put('/api/v1/admin/pois/poi-1')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .send({ name: { vi: 'Phở Thìn mới' } });
 
     expect(res.status).toBe(200);
@@ -409,7 +437,7 @@ describe('ADMIN routes', () => {
       updatedAt: new Date('2026-03-26T00:00:00Z').toISOString()
     } as never);
 
-    const res = await request(app).delete('/api/v1/admin/pois/poi-1');
+    const res = await request(app).delete('/api/v1/admin/pois/poi-1').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('poi-1');
@@ -441,6 +469,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .post('/api/v1/admin/tours')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .send({
         name: { vi: 'Tour Pho Co' },
         description: { vi: 'Kham pha pho co' },
@@ -471,7 +500,7 @@ describe('ADMIN routes', () => {
       updatedAt: new Date('2026-03-26T00:00:00Z').toISOString()
     } as never);
 
-    const res = await request(app).get('/api/v1/admin/tours/tour-1');
+    const res = await request(app).get('/api/v1/admin/tours/tour-1').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('tour-1');
@@ -498,6 +527,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .put('/api/v1/admin/tours/tour-1')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .send({ name: { vi: 'Tour Pho Co Moi' }, duration: 95 });
 
     expect(res.status).toBe(200);
@@ -529,7 +559,7 @@ describe('ADMIN routes', () => {
       updatedAt: new Date('2026-03-27T00:00:00Z').toISOString()
     } as never);
 
-    const res = await request(app).delete('/api/v1/admin/tours/tour-1');
+    const res = await request(app).delete('/api/v1/admin/tours/tour-1').set('Authorization', ADMIN_AUTH_HEADER);
 
     expect(res.status).toBe(200);
     expect(res.body.id).toBe('tour-1');
@@ -549,7 +579,10 @@ describe('ADMIN routes', () => {
       syncVersion: 99
     });
 
-    const res = await request(app).post('/api/v1/admin/sync/invalidate').send({});
+    const res = await request(app)
+      .post('/api/v1/admin/sync/invalidate')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({});
 
     expect(res.status).toBe(200);
     expect(res.body.invalidated).toBe(true);
@@ -574,6 +607,7 @@ describe('ADMIN routes', () => {
 
     const res = await request(app)
       .post('/api/v1/admin/maintenance/pois/soft-delete-cleanup')
+      .set('Authorization', ADMIN_AUTH_HEADER)
       .send({ dryRun: false, reason: 'manual maintenance' });
 
     expect(res.status).toBe(200);
@@ -586,5 +620,95 @@ describe('ADMIN routes', () => {
         })
       })
     );
+  });
+
+  it('POST /api/v1/admin/users/:id/role should assign USER to PARTNER', async () => {
+    const app = createApp();
+
+    vi.mocked(assignAdminUserRole).mockResolvedValue({
+      id: 'user-2',
+      email: 'target@example.com',
+      role: 'PARTNER',
+      previousRole: 'USER',
+      reason: 'promote partner',
+      reauthRequired: true
+    });
+
+    const res = await request(app)
+      .post('/api/v1/admin/users/user-2/role')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({ role: 'PARTNER', reason: 'promote partner' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe('PARTNER');
+    expect(assignAdminUserRole).toHaveBeenCalledWith({
+      actorId: 'admin-1',
+      targetUserId: 'user-2',
+      nextRole: 'PARTNER',
+      reason: 'promote partner'
+    });
+  });
+
+  it('POST /api/v1/admin/users/:id/role should return 403 when caller is PARTNER', async () => {
+    const app = createApp();
+    vi.mocked(verifyJwt).mockReturnValue({ sub: 'partner-1', role: 'PARTNER' });
+
+    const res = await request(app)
+      .post('/api/v1/admin/users/user-2/role')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({ role: 'USER' });
+
+    expect(res.status).toBe(403);
+    expect(assignAdminUserRole).not.toHaveBeenCalled();
+  });
+
+  it('POST /api/v1/admin/users/:id/role/revoke should downgrade to USER', async () => {
+    const app = createApp();
+
+    vi.mocked(revokeAdminUserRole).mockResolvedValue({
+      id: 'user-2',
+      email: 'target@example.com',
+      role: 'USER',
+      previousRole: 'ADMIN',
+      reason: 'revoke elevated role',
+      reauthRequired: true
+    });
+
+    const res = await request(app)
+      .post('/api/v1/admin/users/user-2/role/revoke')
+      .set('Authorization', ADMIN_AUTH_HEADER)
+      .send({ reason: 'revoke elevated role' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.role).toBe('USER');
+    expect(revokeAdminUserRole).toHaveBeenCalledWith({
+      actorId: 'admin-1',
+      targetUserId: 'user-2',
+      reason: 'revoke elevated role'
+    });
+  });
+
+  it('GET /api/v1/admin/users should filter users by role', async () => {
+    const app = createApp();
+
+    vi.mocked(listAdminUsers).mockResolvedValue([
+      {
+        id: 'user-1',
+        email: 'user1@example.com',
+        fullName: 'User One',
+        role: 'PARTNER',
+        isActive: true,
+        createdAt: '2026-04-08T00:00:00.000Z',
+        updatedAt: '2026-04-08T00:00:00.000Z'
+      }
+    ]);
+
+    const res = await request(app)
+      .get('/api/v1/admin/users?role=PARTNER')
+      .set('Authorization', ADMIN_AUTH_HEADER);
+
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(listAdminUsers).toHaveBeenCalledWith({ role: 'PARTNER' });
   });
 });

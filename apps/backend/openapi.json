@@ -730,13 +730,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -776,7 +769,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_pois_id_audio_generate",
@@ -791,13 +784,6 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -840,7 +826,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_pois_id_image_upload",
@@ -874,13 +860,6 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -923,7 +902,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_tours_id_image_upload",
@@ -952,15 +931,6 @@
     "/api/v1/admin/pois": {
       "post": {
         "description": "Create POI record from CMS payload.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "201": {
             "description": "Created",
@@ -998,7 +968,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_pois",
@@ -1006,15 +976,6 @@
       },
       "get": {
         "description": "List POIs including unpublished records for CMS.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1052,7 +1013,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "get_api_v1_admin_pois",
@@ -1067,13 +1028,6 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -1116,7 +1070,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_pois_id_publish",
@@ -1131,13 +1085,6 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -1180,7 +1127,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "get_api_v1_admin_pois_id",
@@ -1196,13 +1143,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1242,7 +1182,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "put_api_v1_admin_pois_id",
@@ -1258,13 +1198,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1304,7 +1237,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "delete_api_v1_admin_pois_id",
@@ -1314,15 +1247,6 @@
     "/api/v1/admin/tours": {
       "post": {
         "description": "Create tour with ordered POI sequence.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "201": {
             "description": "Created",
@@ -1360,7 +1284,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_tours",
@@ -1375,13 +1299,6 @@
             "name": "id",
             "in": "path",
             "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
             "schema": {
               "type": "string"
             }
@@ -1424,7 +1341,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "get_api_v1_admin_tours_id",
@@ -1440,13 +1357,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1486,7 +1396,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "put_api_v1_admin_tours_id",
@@ -1502,13 +1412,6 @@
             "schema": {
               "type": "string"
             }
-          },
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
           }
         ],
         "responses": {
@@ -1548,7 +1451,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "delete_api_v1_admin_tours_id",
@@ -1558,15 +1461,6 @@
     "/api/v1/admin/maintenance/pois/soft-delete-cleanup": {
       "post": {
         "description": "Run dry-run or execute soft-delete retention cleanup.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1604,7 +1498,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_maintenance_pois_soft_delete_cleanup",
@@ -1632,15 +1526,6 @@
     "/api/v1/admin/sync/invalidate": {
       "post": {
         "description": "Force clients to refresh sync metadata.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1678,7 +1563,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "post_api_v1_admin_sync_invalidate",
@@ -1688,15 +1573,6 @@
     "/api/v1/admin/tts/queue/status": {
       "get": {
         "description": "Return queue counts and worker status.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1734,7 +1610,7 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "get_api_v1_admin_tts_queue_status",
@@ -1744,15 +1620,6 @@
     "/api/v1/admin/tts/config/validate": {
       "get": {
         "description": "Validate runtime TTS configuration.",
-        "parameters": [
-          {
-            "name": "x-admin-api-key",
-            "in": "header",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
         "responses": {
           "200": {
             "description": "OK",
@@ -1783,11 +1650,227 @@
         ],
         "security": [
           {
-            "adminApiKey": []
+            "bearerAuth": []
           }
         ],
         "operationId": "get_api_v1_admin_tts_config_validate",
         "summary": "Validate TTS config"
+      }
+    },
+    "/api/v1/admin/users": {
+      "get": {
+        "description": "Retrieve users and optionally filter by role.",
+        "parameters": [
+          {
+            "name": "role",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "USER",
+                "PARTNER",
+                "ADMIN"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserListResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "get_api_v1_admin_users",
+        "summary": "List users for admin"
+      }
+    },
+    "/api/v1/admin/users/{id}/role": {
+      "post": {
+        "description": "Assign USER/PARTNER/ADMIN role for target user.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserRoleMutationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "role"
+                ],
+                "properties": {
+                  "role": {
+                    "type": "string",
+                    "enum": [
+                      "USER",
+                      "PARTNER",
+                      "ADMIN"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "post_api_v1_admin_users_id_role",
+        "summary": "Assign user role"
+      }
+    },
+    "/api/v1/admin/users/{id}/role/revoke": {
+      "post": {
+        "description": "Downgrade target user role to USER.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminUserRoleMutationResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": false,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "reason": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Admin"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "operationId": "post_api_v1_admin_users_id_role_revoke",
+        "summary": "Revoke elevated role"
       }
     },
     "/api/v1/pois": {
@@ -2398,11 +2481,6 @@
         "type": "http",
         "scheme": "bearer",
         "bearerFormat": "JWT"
-      },
-      "adminApiKey": {
-        "type": "apiKey",
-        "in": "header",
-        "name": "x-admin-api-key"
       }
     },
     "schemas": {
@@ -3080,6 +3158,91 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "AdminUserListItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "fullName": {
+            "type": "string",
+            "nullable": true
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "PARTNER",
+              "ADMIN"
+            ]
+          },
+          "isActive": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AdminUserListResponse": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AdminUserListItem"
+            }
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "AdminUserRoleMutationResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "PARTNER",
+              "ADMIN"
+            ]
+          },
+          "previousRole": {
+            "type": "string",
+            "enum": [
+              "USER",
+              "PARTNER",
+              "ADMIN"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "reauthRequired": {
+            "type": "boolean"
           }
         }
       },

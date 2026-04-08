@@ -53,6 +53,12 @@ enum SyncAction {
   UNPUBLISH
 }
 
+enum UserRole {
+  USER
+  PARTNER
+  ADMIN
+}
+
 model PointOfInterest {
   id              String           @id @default(uuid())
   name            Json // { "vi": "...", "en": "..." }
@@ -188,9 +194,11 @@ model User {
   email               String               @unique
   passwordHash        String               @map("password_hash")
   fullName            String?              @map("full_name")
+  role                UserRole             @default(USER)
   deviceId            String?              @map("device_id")
   sessionId           String?              @map("session_id")
   claimCodeId         String?              @map("claim_code_id")
+  tokenInvalidBefore  DateTime?            @map("token_invalid_before")
   preferredLanguage   String               @default("vi") @map("preferred_language")
   isActive            Boolean              @default(true) @map("is_active")
   lastSyncAt          DateTime?            @map("last_sync_at")
@@ -203,6 +211,8 @@ model User {
 
   @@index([claimCodeId], map: "idx_users_claim_code_id")
   @@index([isActive], map: "idx_users_is_active")
+  @@index([role], map: "idx_users_role")
+  @@index([tokenInvalidBefore], map: "idx_users_token_invalid_before")
   @@map("users")
 }
 

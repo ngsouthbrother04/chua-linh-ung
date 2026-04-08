@@ -21,7 +21,7 @@
     "prisma:generate": "prisma generate --schema prisma/schema.prisma",
     "prisma:migrate:dev": "prisma migrate dev --schema prisma/schema.prisma",
     "prisma:migrate:deploy": "prisma migrate deploy --schema prisma/schema.prisma",
-    "prisma:seed": "ts-node --transpile-only -r dotenv/config prisma/seed.ts",
+    "prisma:seed": "node -r ts-node/register/transpile-only -r dotenv/config prisma/seed.ts",
     "db:setup": "npm run prisma:migrate:deploy && npm run prisma:generate && npm run prisma:seed"
   },
   "keywords": [],

@@ -4,6 +4,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import prisma from '../src/lib/prisma';
 import adminRouter from '../src/routes/api/admin';
+import { createAuthToken } from '../src/services/authService';
 import { errorHandlingMiddleware, notFoundMiddleware } from '../src/middlewares/errorHandlingMiddleware';
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
@@ -22,6 +23,7 @@ describeIfDb('ADMIN tour CRUD integration', () => {
   const app = createApp();
   const poiIds = [`tour-poi-1-${Date.now()}`, `tour-poi-2-${Date.now()}`];
   const originalEnv = { ...process.env };
+  const { token: adminToken } = createAuthToken('integration-admin', undefined, 'ADMIN');
   let createdTourId: string | null = null;
   let originalAppSettingState: {
     currentVersion: number;
@@ -47,8 +49,6 @@ describeIfDb('ADMIN tour CRUD integration', () => {
   });
 
   beforeEach(async () => {
-    process.env.ADMIN_API_KEY = 'integration-admin-key';
-
     await prisma.appSetting.upsert({
       where: { id: 1 },
       update: {
@@ -167,7 +167,7 @@ describeIfDb('ADMIN tour CRUD integration', () => {
   it('should create, read, update, and soft delete a tour in the DB', async () => {
     const createResponse = await request(app)
       .post('/api/v1/admin/tours')
-      .set('x-admin-api-key', 'integration-admin-key')
+      .set('Authorization', `Bearer ${adminToken}`)
       .set('x-admin-actor', 'integration-test')
       .send({
         name: { vi: 'Tour Pho Co', en: 'Old Quarter Tour' },
@@ -192,7 +192,7 @@ describeIfDb('ADMIN tour CRUD integration', () => {
 
     const getResponse = await request(app)
       .get(`/api/v1/admin/tours/${createResponse.body.id}`)
-      .set('x-admin-api-key', 'integration-admin-key');
+      .set('Authorization', `Bearer ${adminToken}`);
 
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.id).toBe(createResponse.body.id);
@@ -200,7 +200,7 @@ describeIfDb('ADMIN tour CRUD integration', () => {
 
     const updateResponse = await request(app)
       .put(`/api/v1/admin/tours/${createResponse.body.id}`)
-      .set('x-admin-api-key', 'integration-admin-key')
+      .set('Authorization', `Bearer ${adminToken}`)
       .set('x-admin-actor', 'integration-test')
       .send({
         name: { vi: 'Tour Pho Co Moi', en: 'Updated Old Quarter Tour' },
@@ -226,7 +226,7 @@ describeIfDb('ADMIN tour CRUD integration', () => {
 
     const deleteResponse = await request(app)
       .delete(`/api/v1/admin/tours/${createResponse.body.id}`)
-      .set('x-admin-api-key', 'integration-admin-key')
+      .set('Authorization', `Bearer ${adminToken}`)
       .set('x-admin-actor', 'integration-test');
 
     expect(deleteResponse.status).toBe(200);

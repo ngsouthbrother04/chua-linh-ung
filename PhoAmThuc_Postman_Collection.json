@@ -419,7 +419,7 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/pois",
@@ -433,7 +433,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
@@ -452,7 +452,7 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
@@ -466,7 +466,7 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
@@ -485,7 +485,7 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
@@ -499,7 +499,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/publish",
@@ -513,7 +513,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/audio/generate",
@@ -527,7 +527,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "formdata",
@@ -551,7 +551,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
@@ -570,7 +570,7 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
@@ -584,7 +584,7 @@
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
@@ -603,7 +603,7 @@
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
@@ -617,7 +617,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "body": {
               "mode": "formdata",
@@ -641,7 +641,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" },
+              { "key": "Authorization", "value": "Bearer {{token}}" },
               { "key": "Content-Type", "value": "application/json" }
             ],
             "body": {
@@ -660,7 +660,7 @@
           "request": {
             "method": "POST",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/sync/invalidate",
@@ -674,7 +674,7 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tts/queue/status",
@@ -688,7 +688,7 @@
           "request": {
             "method": "GET",
             "header": [
-              { "key": "x-admin-api-key", "value": "{{adminApiKey}}" }
+              { "key": "Authorization", "value": "Bearer {{token}}" }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tts/config/validate",
@@ -746,11 +746,6 @@
     {
       "key": "refreshToken",
       "value": "REFRESH_TOKEN_HERE",
-      "type": "string"
-    },
-    {
-      "key": "adminApiKey",
-      "value": "ADMIN_KEY_HERE",
       "type": "string"
     },
     {

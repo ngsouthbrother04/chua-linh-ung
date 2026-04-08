@@ -1,11 +1,16 @@
 /// <reference types="node" />
 import "dotenv/config";
+import bcrypt from "bcryptjs";
 import { PrismaClient } from "../src/generated/prisma/client";
 import { buildSeedDataset } from "../src/services/seedService";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  const adminEmail = "admin@phoamthuc.local";
+  const adminPassword = "Admin@123456";
+  const passwordHash = await bcrypt.hash(adminPassword, 10);
+
   const dataset = buildSeedDataset(1, Date.now());
   const poiIds = dataset.pois.map((poi) => poi.id);
   const tourIds = dataset.tours.map((tour) => tour.id);
@@ -105,6 +110,29 @@ async function main() {
     await tx.analyticsEvent.createMany({
       data: dataset.analyticsEvents,
     });
+
+    await tx.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        fullName: "System Admin",
+        role: "ADMIN",
+        isActive: true,
+        passwordHash,
+      },
+      create: {
+        email: adminEmail,
+        fullName: "System Admin",
+        role: "ADMIN",
+        isActive: true,
+        preferredLanguage: "vi",
+        passwordHash,
+      },
+    });
+  });
+
+  console.log("Seeded admin account:", {
+    email: adminEmail,
+    password: adminPassword,
   });
 }
 

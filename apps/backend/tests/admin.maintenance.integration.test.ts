@@ -7,6 +7,7 @@ import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import prisma from '../src/lib/prisma';
 import adminRouter from '../src/routes/api/admin';
+import { createAuthToken } from '../src/services/authService';
 import { errorHandlingMiddleware, notFoundMiddleware } from '../src/middlewares/errorHandlingMiddleware';
 
 const hasDatabaseUrl = Boolean(process.env.DATABASE_URL);
@@ -25,6 +26,7 @@ describeIfDb('ADMIN maintenance integration', () => {
   const app = createApp();
   const oldPoiId = `poi-maint-old-${Date.now()}`;
   const recentPoiId = `poi-maint-recent-${Date.now()}`;
+  const { token: adminToken } = createAuthToken('integration-admin', undefined, 'ADMIN');
   let tempAudioDir = '';
   const originalEnv = { ...process.env };
 
@@ -35,7 +37,6 @@ describeIfDb('ADMIN maintenance integration', () => {
   beforeEach(async () => {
     tempAudioDir = await fs.mkdtemp(path.join(os.tmpdir(), 'poi-maint-cleanup-'));
 
-    process.env.ADMIN_API_KEY = 'integration-admin-key';
     process.env.POI_SOFT_DELETE_RETENTION_DAYS = '30';
     process.env.TTS_LOCAL_AUDIO_DIR = tempAudioDir;
 
@@ -111,7 +112,7 @@ describeIfDb('ADMIN maintenance integration', () => {
   it('should return dry-run summary without deleting records', async () => {
     const response = await request(app)
       .post('/api/v1/admin/maintenance/pois/soft-delete-cleanup')
-      .set('x-admin-api-key', 'integration-admin-key')
+      .set('Authorization', `Bearer ${adminToken}`)
       .set('x-admin-actor', 'integration-test')
       .send({ dryRun: true, reason: 'verify dry-run' });
 
@@ -127,7 +128,7 @@ describeIfDb('ADMIN maintenance integration', () => {
   it('should purge only POIs older than retention and cleanup old audio files', async () => {
     const response = await request(app)
       .post('/api/v1/admin/maintenance/pois/soft-delete-cleanup')
-      .set('x-admin-api-key', 'integration-admin-key')
+      .set('Authorization', `Bearer ${adminToken}`)
       .set('x-admin-actor', 'integration-test')
       .send({ dryRun: false, reason: 'execute retention cleanup' });
 

@@ -228,6 +228,9 @@ CREATE TABLE users (
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
   full_name VARCHAR(255),
+
+  -- Role-based authorization
+  role UserRole NOT NULL DEFAULT 'USER',  -- USER, PARTNER, ADMIN
   
   -- Device & session info
   device_id VARCHAR(255),  -- Optional device identifier
@@ -252,6 +255,7 @@ CREATE TABLE users (
 CREATE INDEX idx_users_device_id ON users(device_id);
 CREATE INDEX idx_users_claim_code_id ON users(claim_code_id);
 CREATE INDEX idx_users_active ON users(is_active);
+CREATE INDEX idx_users_role ON users(role);
 ```
 
 ---

@@ -22,11 +22,6 @@ const doc = {
         type: 'http',
         scheme: 'bearer',
         bearerFormat: 'JWT'
-      },
-      adminApiKey: {
-        type: 'apiKey',
-        in: 'header',
-        name: 'x-admin-api-key'
       }
     }
   }

@@ -31,7 +31,7 @@ function requiresBearer(apiPath) {
   return false;
 }
 
-function requiresAdminKey(apiPath) {
+function requiresAdminBearer(apiPath) {
   return apiPath.startsWith('/api/v1/admin');
 }
 
@@ -334,6 +334,56 @@ function buildOverrides() {
       summary: 'Validate TTS config',
       description: 'Validate runtime TTS configuration.',
       responseSchemas: { '200': '#/components/schemas/AdminTtsConfigValidationResponse' }
+    },
+    'GET /api/v1/admin/users': {
+      summary: 'List users for admin',
+      description: 'Retrieve users and optionally filter by role.',
+      parameters: [
+        {
+          name: 'role',
+          in: 'query',
+          schema: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] }
+        }
+      ],
+      responseSchemas: { '200': '#/components/schemas/AdminUserListResponse' }
+    },
+    'POST /api/v1/admin/users/:id/role': {
+      summary: 'Assign user role',
+      description: 'Assign USER/PARTNER/ADMIN role for target user.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['role'],
+              properties: {
+                role: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] },
+                reason: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminUserRoleMutationResponse' }
+    },
+    'POST /api/v1/admin/users/:id/role/revoke': {
+      summary: 'Revoke elevated role',
+      description: 'Downgrade target user role to USER.',
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                reason: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminUserRoleMutationResponse' }
     },
 
     'GET /api/v1/pois': {
@@ -852,6 +902,43 @@ function main() {
     }
   };
 
+  doc.components.schemas.AdminUserListItem = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      email: { type: 'string' },
+      fullName: { type: 'string', nullable: true },
+      role: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] },
+      isActive: { type: 'boolean' },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' }
+    }
+  };
+
+  doc.components.schemas.AdminUserListResponse = {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AdminUserListItem' }
+      },
+      total: { type: 'integer' }
+    }
+  };
+
+  doc.components.schemas.AdminUserRoleMutationResponse = {
+    type: 'object',
+    properties: {
+      message: { type: 'string' },
+      id: { type: 'string' },
+      email: { type: 'string' },
+      role: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] },
+      previousRole: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] },
+      reason: { type: 'string', nullable: true },
+      reauthRequired: { type: 'boolean' }
+    }
+  };
+
   doc.components.schemas.PoiRadiusSearchResponse = {
     type: 'object',
     properties: {
@@ -925,8 +1012,8 @@ function main() {
 
       operation.tags = [getTagByPath(apiPath)];
 
-      if (requiresAdminKey(apiPath)) {
-        operation.security = [{ adminApiKey: [] }];
+      if (requiresAdminBearer(apiPath)) {
+        operation.security = [{ bearerAuth: [] }];
         ensureErrorResponse(operation, '403', 'Forbidden');
       } else if (requiresBearer(apiPath)) {
         operation.security = [{ bearerAuth: [] }];

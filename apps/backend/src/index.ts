@@ -24,6 +24,23 @@ const parsedPort = Number(process.env.PORT);
 const PORT = Number.isInteger(parsedPort) && parsedPort > 0 ? parsedPort : 3000;
 const OPENAPI_FILE_PATH = path.resolve(process.cwd(), 'openapi.json');
 
+async function validateAuthRoleSchema(): Promise<void> {
+  const missing = await prisma.$queryRaw<Array<{ column_name: string }>>`
+    SELECT required.column_name
+    FROM (VALUES ('role'), ('token_invalid_before')) AS required(column_name)
+    LEFT JOIN information_schema.columns c
+      ON c.table_schema = 'public'
+      AND c.table_name = 'users'
+      AND c.column_name = required.column_name
+    WHERE c.column_name IS NULL
+  `;
+
+  if (missing.length > 0) {
+    const columns = missing.map((item) => item.column_name).join(', ');
+    throw new Error(`Thiếu cột bắt buộc trong bảng users: ${columns}. Hãy chạy migration mới nhất trước khi khởi động server.`);
+  }
+}
+
 function loadOpenApiSpec() {
   if (!fs.existsSync(OPENAPI_FILE_PATH)) {
     return {
@@ -81,6 +98,9 @@ app.listen(PORT, "0.0.0.0", async () => { // Thêm "0.0.0.0" để cho phép k�
   try {
     await prisma.$connect();
     console.log('Database connected successfully');
+
+    await validateAuthRoleSchema();
+    console.log('Auth role schema preflight passed');
 
     const ttsValidation = validateTtsRuntimeConfig();
     if (!ttsValidation.ok) {

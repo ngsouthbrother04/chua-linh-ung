@@ -1,6 +1,6 @@
 export interface AdminAuditEvent {
   action: string;
-  entity: 'poi' | 'tour' | 'system';
+  entity: 'poi' | 'tour' | 'system' | 'user';
   entityId?: string;
   actor?: string;
   reason?: string;
