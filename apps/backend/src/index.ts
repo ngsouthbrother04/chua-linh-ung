@@ -11,6 +11,7 @@ import syncRouter from './routes/api/sync';
 import adminRouter from './routes/api/admin';
 import poisRouter from './routes/api/pois';
 import toursRouter from './routes/api/tours';
+import userRouter from './routes/api/userRouter';
 import analyticsRouter from './routes/api/analytics';
 import prisma from './lib/prisma';
 import { errorHandlingMiddleware, notFoundMiddleware } from './middlewares/errorHandlingMiddleware';
@@ -36,7 +37,7 @@ async function validateAuthRoleSchema(): Promise<void> {
   `;
 
   if (missing.length > 0) {
-    const columns = missing.map((item) => item.column_name).join(', ');
+    const columns = missing.map((item: any) => item.column_name).join(', ');
     throw new Error(`Thiếu cột bắt buộc trong bảng users: ${columns}. Hãy chạy migration mới nhất trước khi khởi động server.`);
   }
 }
@@ -61,6 +62,7 @@ app.use(cors());
 app.use(helmet());
 app.use(compression({ threshold: 0 }));
 app.use(express.json());
+app.use('/api/v1/users', userRouter);
 app.use('/audio', express.static(path.resolve(process.cwd(), 'public/audio')));
 app.get('/api-docs/swagger.json', (_req, res) => {
   return res.status(200).json(loadOpenApiSpec());

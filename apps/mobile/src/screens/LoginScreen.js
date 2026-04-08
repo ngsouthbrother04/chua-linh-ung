@@ -7,20 +7,28 @@ export default function LoginScreen({ navigation }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
-  const handleLogin = async () => {
-    try {
-      const res = await API.post("/auth/login", { email, password });
+const handleLogin = async () => {
+  try {
+    const res = await API.post("/auth/login", { email, password });
+    
+    if (res.data && res.data.accessToken) {
+      const token = res.data.accessToken;
+      const user = res.data.user; // Kiểm tra log xem server trả về user hay data.user
+
+      await AsyncStorage.setItem('userToken', token);
       
-      if (res.data && res.data.accessToken) {
-        await AsyncStorage.setItem('userToken', res.data.accessToken);
-        // Thay vì: navigation.navigate("Home");
-          navigation.replace("Home");
+      // LƯU CẨN THẬN Ở ĐÂY
+      if (user) {
+        await AsyncStorage.setItem('userName', user.fullName || "Người dùng");
+        await AsyncStorage.setItem('userEmail', user.email || email);
       }
-    } catch (err) {
-      console.log("Error:", err.message);
-      Alert.alert("Lỗi", "Đăng nhập thất bại. Kiểm tra lại IP hoặc Tài khoản!");
+
+      navigation.replace("Home");
     }
-  };
+  } catch (err) {
+    Alert.alert("Lỗi", "Đăng nhập thất bại!");
+  }
+};
 
   return (
     <KeyboardAvoidingView 
@@ -28,13 +36,14 @@ export default function LoginScreen({ navigation }) {
       style={styles.container}
     >
       <View style={styles.innerContainer}>
-        {/* Sửa lại Tên App */}
+        {/* Header App */}
         <View style={styles.headerContainer}>
           <Text style={styles.logoIcon}>🏙️</Text>
           <Text style={styles.logoText}>PHỐ ẨM THỰC</Text>
           <Text style={styles.subTitle}>Hành trình khám phá đặc sản địa phương</Text>
         </View>
 
+        {/* Input Email */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Email</Text>
           <TextInput
@@ -47,6 +56,7 @@ export default function LoginScreen({ navigation }) {
           />
         </View>
 
+        {/* Input Mật khẩu */}
         <View style={styles.inputContainer}>
           <Text style={styles.label}>Mật khẩu</Text>
           <TextInput
@@ -58,10 +68,12 @@ export default function LoginScreen({ navigation }) {
           />
         </View>
 
+        {/* Nút Đăng Nhập */}
         <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Đăng Nhập</Text>
         </TouchableOpacity>
 
+        {/* Footer chuyển sang Đăng ký */}
         <View style={styles.footer}>
           <Text style={styles.footerText}>Bạn mới biết đến Phố Ẩm Thực? </Text>
           <TouchableOpacity onPress={() => navigation.navigate("Register")}>
@@ -81,7 +93,7 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 28,
     fontWeight: "900",
-    color: "#FF6F00", // Màu cam phố ẩm thực
+    color: "#FF6F00",
     letterSpacing: 1.5,
   },
   subTitle: { fontSize: 13, color: "#9E9E9E", marginTop: 5 },
@@ -100,10 +112,6 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     paddingVertical: 14,
     marginTop: 20,
-    shadowColor: "#FF6F00",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
     elevation: 3,
   },
   loginButtonText: { color: "#fff", fontSize: 16, fontWeight: "bold", textAlign: "center" },

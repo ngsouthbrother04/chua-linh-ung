@@ -544,7 +544,7 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
     throw new Error('PAYMENT_ALREADY_FINALIZED');
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const updated = await prisma.$transaction(async (tx: any) => {
     const payment = await tx.paymentTransaction.update({
       where: { transactionId: input.transactionId },
       data: { status: mappedStatus }

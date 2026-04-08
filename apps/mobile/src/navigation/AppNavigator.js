@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import LoginScreen from "../screens/LoginScreen";
 import HomeScreen from "../screens/HomeScreen";
 import RegisterScreen from "../screens/RegisterScreen";
-
+import ProfileScreen from "../screens/ProfileScreen";
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
@@ -42,6 +42,12 @@ export default function AppNavigator() {
           name="Home" 
           component={HomeScreen} 
           options={{ title: "🏠 Trang chủ" }} 
+        />
+        {/* 4.Màn hình Profile: Cho phép người dùng xem và chỉnh sửa thông tin cá nhân */}
+        <Stack.Screen 
+          name="Profile" 
+          component={ProfileScreen} 
+          options={{ title: "👤 Thông tin cá nhân" }} 
         />
       </Stack.Navigator>
     </NavigationContainer>
