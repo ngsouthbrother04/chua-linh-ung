@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { processBatchEvents, processPresenceHeartbeat, getAnalyticsStats } from '../../services/analyticsService';
-import { requireAuth } from '../../middlewares/authMiddleware';
+import { requireAuth, requireRole } from '../../middlewares/authMiddleware';
 import asyncHandler from '../../utils/asyncHandler';
 
 const router = Router();
@@ -20,6 +20,7 @@ const router = Router();
 router.post(
   '/events',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req, res) => {
     const { events } = req.body;
 
@@ -49,6 +50,7 @@ router.post(
 router.post(
   '/presence/heartbeat',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req, res) => {
     const result = await processPresenceHeartbeat(req.body);
 
@@ -71,6 +73,7 @@ router.post(
 router.get(
   '/stats',
   requireAuth,
+  requireRole(['ADMIN']),
   asyncHandler(async (req, res) => {
     const stats = await getAnalyticsStats();
 

@@ -8,14 +8,51 @@ const prisma = new PrismaClient();
 
 async function main() {
   const adminEmail = "admin@phoamthuc.local";
-  const adminPassword = "Admin@123456";
-  const passwordHash = await bcrypt.hash(adminPassword, 10);
+  const partnerEmail = "partner@phoamthuc.local";
+  const sharedPassword = "123321az";
+  const passwordHash = await bcrypt.hash(sharedPassword, 10);
 
   const dataset = buildSeedDataset(1, Date.now());
   const poiIds = dataset.pois.map((poi) => poi.id);
   const tourIds = dataset.tours.map((tour) => tour.id);
 
   await prisma.$transaction(async (tx) => {
+    const adminUser = await tx.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        fullName: "System Admin",
+        role: "ADMIN",
+        isActive: true,
+        passwordHash,
+      },
+      create: {
+        email: adminEmail,
+        fullName: "System Admin",
+        role: "ADMIN",
+        isActive: true,
+        preferredLanguage: "vi",
+        passwordHash,
+      },
+    });
+
+    const partnerUser = await tx.user.upsert({
+      where: { email: partnerEmail },
+      update: {
+        fullName: "Food Partner",
+        role: "PARTNER",
+        isActive: true,
+        passwordHash,
+      },
+      create: {
+        email: partnerEmail,
+        fullName: "Food Partner",
+        role: "PARTNER",
+        isActive: true,
+        preferredLanguage: "vi",
+        passwordHash,
+      },
+    });
+
     await tx.analyticsEvent.deleteMany({
       where: {
         OR: [
@@ -62,6 +99,7 @@ async function main() {
           image: poi.image,
           isPublished: true,
           publishedAt: new Date(),
+          creatorId: partnerUser.id,
           contentVersion: poi.contentVersion,
         },
         create: {
@@ -75,6 +113,7 @@ async function main() {
           image: poi.image,
           isPublished: true,
           publishedAt: new Date(),
+          creatorId: partnerUser.id,
           contentVersion: poi.contentVersion,
         },
       });
@@ -91,6 +130,7 @@ async function main() {
           image: tour.image,
           isPublished: true,
           publishedAt: new Date(),
+          creatorId: partnerUser.id,
           contentVersion: tour.contentVersion,
         },
         create: {
@@ -102,6 +142,7 @@ async function main() {
           image: tour.image,
           isPublished: true,
           publishedAt: new Date(),
+          creatorId: partnerUser.id,
           contentVersion: tour.contentVersion,
         },
       });
@@ -111,29 +152,12 @@ async function main() {
       data: dataset.analyticsEvents,
     });
 
-    await tx.user.upsert({
-      where: { email: adminEmail },
-      update: {
-        fullName: "System Admin",
-        role: "ADMIN",
-        isActive: true,
-        passwordHash,
-      },
-      create: {
-        email: adminEmail,
-        fullName: "System Admin",
-        role: "ADMIN",
-        isActive: true,
-        preferredLanguage: "vi",
-        passwordHash,
-      },
-    });
+    void adminUser;
   });
 
-  console.log("Seeded admin account:", {
-    email: adminEmail,
-    password: adminPassword,
-  });
+  console.log("Seeded accounts:");
+  console.log("ADMIN:", { email: adminEmail, password: sharedPassword });
+  console.log("PARTNER:", { email: partnerEmail, password: sharedPassword });
 }
 
 main()

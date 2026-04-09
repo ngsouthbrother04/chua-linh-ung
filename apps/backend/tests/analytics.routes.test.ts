@@ -77,6 +77,7 @@ describe('Analytics API', () => {
   });
 
   it('GET /api/v1/analytics/stats should return stats mapping', async () => {
+    vi.mocked(verifyJwt).mockReturnValue({ sub: 'user-id', role: 'ADMIN' });
     const app = createApp();
     vi.mocked(getAnalyticsStats).mockResolvedValue({
       plays: 10,

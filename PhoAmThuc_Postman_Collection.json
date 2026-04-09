@@ -1,203 +1,672 @@
 {
   "info": {
     "_postman_id": "bfa86fb0-ca7d-411a-a032-1b15132c3ae9",
-    "name": "PhoAmThuc API",
-    "description": "Toàn bộ API hiện có của dự án Phố Ẩm Thực theo kiến trúc mới (Freemium, Auth JWT, API Sync). Chứa Test Scripts tự động cập nhật token.",
+    "name": "PhoAmThuc API (Full - OpenAPI Synced)",
+    "description": "Collection duoc sinh tu OpenAPI hien tai de test toan bo endpoint backend.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Auth",
+      "name": "Smoke Test Order (E2E)",
       "item": [
         {
-          "name": "Register (Đăng ký)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.token) {",
-                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
-                  "}",
-                  "if (jsonData.refreshToken) {",
-                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
-                  "}"
-                ],
-                "type": "text/javascript"
-              }
-            }
-          ],
+          "name": "1) Health Check",
           "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"fullName\": \"Nguyen Van A\",\n  \"deviceId\": \"mobile-device-1\"\n}"
-            },
+            "method": "GET",
             "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/register",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "register"]
+              "raw": "{{baseUrl}}/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                ""
+              ]
             }
           }
         },
         {
-          "name": "Login (Đăng nhập)",
+          "name": "2) Login PARTNER",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.token) {",
-                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
-                  "}",
-                  "if (jsonData.refreshToken) {",
-                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
-                  "}"
-                ],
-                "type": "text/javascript"
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const access = data?.token || data?.accessToken || data?.data?.token || data?.data?.accessToken || data?.tokens?.accessToken;",
+                  "const refresh = data?.refreshToken || data?.data?.refreshToken || data?.tokens?.refreshToken;",
+                  "if (access) { pm.collectionVariables.set('partnerToken', access); pm.collectionVariables.set('token', access); }",
+                  "if (refresh) pm.collectionVariables.set('refreshToken', refresh);"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"email\": \"test@example.com\",\n  \"password\": \"password123\",\n  \"deviceId\": \"mobile-device-1\"\n}"
+              "raw": "{\n  \"email\": \"{{partnerEmail}}\",\n  \"password\": \"{{partnerPassword}}\",\n  \"deviceId\": \"postman-partner-device\"\n}"
             },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/login",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "login"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
             }
           }
         },
         {
-          "name": "Token Refresh",
+          "name": "3) PARTNER Submit Create POI Request",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "var jsonData = pm.response.json();",
-                  "if (jsonData.token) {",
-                  "    pm.collectionVariables.set(\"token\", jsonData.token);",
-                  "}",
-                  "if (jsonData.refreshToken) {",
-                  "    pm.collectionVariables.set(\"refreshToken\", jsonData.refreshToken);",
-                  "}"
-                ],
-                "type": "text/javascript"
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (data?.id) pm.collectionVariables.set('approvalRequestId', data.id);"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partnerToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}"
+              "raw": "{\n  \"name\": {\n    \"vi\": \"POI Smoke Test\",\n    \"en\": \"POI Smoke Test\"\n  },\n  \"description\": {\n    \"vi\": \"Mo ta smoke test\",\n    \"en\": \"Smoke test description\"\n  },\n  \"latitude\": 16.0544,\n  \"longitude\": 108.2022,\n  \"type\": \"FOOD\",\n  \"radius\": 100,\n  \"reason\": \"Smoke test tao POI\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/token-refresh",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "token-refresh"]
+              "raw": "{{baseUrl}}/api/v1/partner/pois",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "pois"
+              ]
             }
           }
         },
         {
-          "name": "Logout",
+          "name": "4) PARTNER Check My Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{partnerToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/approval-requests/mine?status=PENDING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "approval-requests",
+                "mine"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "5) Login ADMIN",
           "event": [
             {
               "listen": "test",
               "script": {
+                "type": "text/javascript",
                 "exec": [
-                  "if (pm.response.code === 200) {",
-                  "    pm.collectionVariables.unset(\"token\");",
-                  "    pm.collectionVariables.unset(\"refreshToken\");",
-                  "}"
-                ],
-                "type": "text/javascript"
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const access = data?.token || data?.accessToken || data?.data?.token || data?.data?.accessToken || data?.tokens?.accessToken;",
+                  "if (access) { pm.collectionVariables.set('adminToken', access); pm.collectionVariables.set('token', access); }"
+                ]
               }
             }
           ],
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\",\n  \"deviceId\": \"postman-admin-device\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            }
+          }
+        },
+        {
+          "name": "6) ADMIN List Pending Requests",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests?status=PENDING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "7) ADMIN Approve Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const poiId = data?.resultSnapshot?.id || data?.targetId || data?.id;",
+                  "if (poiId) { pm.collectionVariables.set('poiId', poiId); pm.collectionVariables.set('approvedPoiId', poiId); }"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionNote\": \"Smoke test approve\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/{{approvalRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "{{approvalRequestId}}",
+                "approve"
+              ]
+            }
+          }
+        },
+        {
+          "name": "8) Public Get POIs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pois?page=1&limit=20",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pois"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "9) Public Get POI By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/pois/{{poiId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pois",
+                "{{poiId}}"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register Account [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"any\",\n  \"password\": \"any\",\n  \"fullName\": \"any\",\n  \"deviceId\": \"any\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const access = data?.token || data?.accessToken || data?.data?.token || data?.data?.accessToken || data?.tokens?.accessToken;",
+                  "const refresh = data?.refreshToken || data?.data?.refreshToken || data?.tokens?.refreshToken;",
+                  "if (access) pm.collectionVariables.set('token', access);",
+                  "if (refresh) pm.collectionVariables.set('refreshToken', refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login Account [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"any\",\n  \"password\": \"any\",\n  \"deviceId\": \"any\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const access = data?.token || data?.accessToken || data?.data?.token || data?.data?.accessToken || data?.tokens?.accessToken;",
+                  "const refresh = data?.refreshToken || data?.data?.refreshToken || data?.tokens?.refreshToken;",
+                  "if (access) pm.collectionVariables.set('token', access);",
+                  "if (refresh) pm.collectionVariables.set('refreshToken', refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Redeem Claim Code [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/payment/claim",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "payment",
+                "claim"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Refresh Access Token [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/token-refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "token-refresh"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"string\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "const access = data?.token || data?.accessToken || data?.data?.token || data?.data?.accessToken || data?.tokens?.accessToken;",
+                  "const refresh = data?.refreshToken || data?.data?.refreshToken || data?.tokens?.refreshToken;",
+                  "if (access) pm.collectionVariables.set('token', access);",
+                  "if (refresh) pm.collectionVariables.set('refreshToken', refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Initiate Payment [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/auth/payment/initiate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "payment",
+                "initiate"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"paymentMethod\": \"vnpay\",\n  \"provider\": \"vnpay\",\n  \"amount\": 1.23,\n  \"currency\": \"string\",\n  \"deviceId\": \"string\",\n  \"returnUrl\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Logout Session [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/logout",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "logout"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"token\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Payment Initiate (Nạp tiền)",
+          "name": "Handle Payment Callback [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"paymentMethod\": \"vnpay\",\n  \"amount\": 50000,\n  \"returnUrl\": \"https://your-app.com/payment/callback\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/payment/initiate",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "payment", "initiate"]
-            }
-          }
-        },
-        {
-          "name": "Payment Claim (Nhập Mã Mua Gói Ngôn Ngữ)",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"code\": \"GIFT-CODE-HERE\"\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/auth/payment/claim",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "payment", "claim"]
-            }
-          }
-        },
-        {
-          "name": "Payment Callback",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Content-Type", "value": "application/json" },
-              { "key": "x-idempotency-key", "value": "{{idempotencyKey}}" },
-              { "key": "x-callback-signature", "value": "SIGNATURE_HERE" },
-              { "key": "x-callback-timestamp", "value": "{{callbackTimestamp}}" }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"transactionId\": \"txn_123456\",\n  \"status\": \"success\",\n  \"deviceId\": \"mobile-device-1\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/auth/payment/callback",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "auth", "payment", "callback"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "payment",
+                "callback"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"string\",\n  \"transactionId\": \"string\",\n  \"status\": \"success\",\n  \"provider\": \"vnpay\",\n  \"gatewayPayload\": {},\n  \"deviceId\": \"string\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get User Profile [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update User Profile [PATCH]",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/profile",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "profile"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"string\",\n  \"email\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Change User Password [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/change-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "change-password"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"oldPassword\": \"string\",\n  \"newPassword\": \"string\"\n}"
             }
           }
         }
@@ -207,55 +676,88 @@
       "name": "Sync",
       "item": [
         {
-          "name": "Sync Manifest",
+          "name": "Get Sync Manifest [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/sync/manifest",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "sync", "manifest"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "manifest"
+              ]
             }
           }
         },
         {
-          "name": "Sync Full (Danh sách địa điểm & Tours bản Offline)",
+          "name": "Get Full Sync Payload [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/sync/full?version=0",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "sync", "full"],
+              "raw": "{{baseUrl}}/api/v1/sync/full?version=1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "full"
+              ],
               "query": [
                 {
                   "key": "version",
-                  "value": "0"
+                  "value": "1"
                 }
               ]
             }
           }
         },
         {
-          "name": "Sync Incremental",
+          "name": "Get Incremental Sync Payload [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/sync/incremental",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sync",
+                "incremental"
+              ]
+            },
             "body": {
               "mode": "raw",
               "raw": "{\n  \"fromVersion\": 1\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/sync/incremental",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "sync", "incremental"]
             }
           }
         }
@@ -265,53 +767,92 @@
       "name": "POIs",
       "item": [
         {
-          "name": "Get POIs (Public)",
+          "name": "List POIs [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/pois?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "pois"],
+              "raw": "{{baseUrl}}/api/v1/pois?page=string&limit=string",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pois"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
+                {
+                  "key": "page",
+                  "value": "string"
+                },
+                {
+                  "key": "limit",
+                  "value": "string"
+                }
               ]
             }
           }
         },
         {
-          "name": "Get POI By Id (Public)",
+          "name": "Get POI Detail [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/pois/{{poiId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "pois", "{{poiId}}"]
+              "raw": "{{baseUrl}}/api/v1/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pois",
+                "{{id}}"
+              ]
             }
           }
         },
         {
-          "name": "Search POIs By Radius",
+          "name": "Search POIs By Radius [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"latitude\": 16.0544,\n  \"longitude\": 108.2022,\n  \"radiusM\": 3000,\n  \"limit\": 20\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/pois/search/radius",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "pois", "search", "radius"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "pois",
+                "search",
+                "radius"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"latitude\": 1.23,\n  \"longitude\": 1.23,\n  \"radiusM\": 1.23,\n  \"limit\": 1\n}"
             }
           }
         }
@@ -321,34 +862,59 @@
       "name": "Tours",
       "item": [
         {
-          "name": "Get Tours (Public)",
+          "name": "List Tours [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/tours?page=1&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "tours"],
+              "raw": "{{baseUrl}}/api/v1/tours?page=string&limit=string",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tours"
+              ],
               "query": [
-                { "key": "page", "value": "1" },
-                { "key": "limit", "value": "20" }
+                {
+                  "key": "page",
+                  "value": "string"
+                },
+                {
+                  "key": "limit",
+                  "value": "string"
+                }
               ]
             }
           }
         },
         {
-          "name": "Get Tour By Id (Public)",
+          "name": "Get Tour Detail [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/tours/{{tourId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "tours", "{{tourId}}"]
+              "raw": "{{baseUrl}}/api/v1/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tours",
+                "{{id}}"
+              ]
             }
           }
         }
@@ -358,54 +924,431 @@
       "name": "Analytics",
       "item": [
         {
-          "name": "Batch Events",
+          "name": "Upload Analytics Events [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"events\": [\n    {\n      \"eventType\": \"poi_view\",\n      \"poiId\": \"{{poiId}}\",\n      \"occurredAt\": \"2026-04-06T10:00:00.000Z\"\n    }\n  ]\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/events",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "events"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "events"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"events\": [\n    {\n      \"deviceId\": \"string\",\n      \"sessionId\": \"string\",\n      \"poiId\": \"string\",\n      \"action\": \"string\",\n      \"durationMs\": 1,\n      \"language\": \"string\",\n      \"timestamp\": 1\n    }\n  ]\n}"
             }
           }
         },
         {
-          "name": "Presence Heartbeat",
+          "name": "Send Presence Heartbeat [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sessionId\": \"session-001\",\n  \"screen\": \"poi_detail\",\n  \"poiId\": \"{{poiId}}\",\n  \"timestamp\": \"2026-04-06T10:00:00.000Z\"\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/presence/heartbeat",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "presence", "heartbeat"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "presence",
+                "heartbeat"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"deviceId\": \"string\",\n  \"sessionId\": \"string\",\n  \"appState\": \"string\",\n  \"audioState\": \"string\",\n  \"timestamp\": 1,\n  \"language\": \"string\"\n}"
             }
           }
         },
         {
-          "name": "Get Analytics Stats",
+          "name": "Get Analytics Stats [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/stats",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "stats"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "stats"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Partner",
+      "item": [
+        {
+          "name": "Upload POI Image [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/pois/{{id}}/image/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "pois",
+                "{{id}}",
+                "image",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Upload Tour Image [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/tours/{{id}}/image/upload",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "tours",
+                "{{id}}",
+                "image",
+                "upload"
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "image",
+                  "type": "file",
+                  "src": ""
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Submit POI Create Request [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/pois",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "pois"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Submit POI Update Request [PUT]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "pois",
+                "{{id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Submit POI Delete Request [DELETE]",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "pois",
+                "{{id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"any\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Tour Create Request [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/tours",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "tours"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Submit Tour Update Request [PUT]",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "tours",
+                "{{id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          }
+        },
+        {
+          "name": "Submit Tour Delete Request [DELETE]",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "tours",
+                "{{id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"any\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List My Approval Requests (Partner) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/approval-requests/mine?status=PENDING&entityType=POI&actionType=CREATE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "approval-requests",
+                "mine"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "entityType",
+                  "value": "POI"
+                },
+                {
+                  "key": "actionType",
+                  "value": "CREATE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Approval Request Detail (Partner) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/partner/approval-requests/mine/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "partner",
+                "approval-requests",
+                "mine",
+                "{{id}}"
+              ]
             }
           }
         }
@@ -415,285 +1358,763 @@
       "name": "Admin",
       "item": [
         {
-          "name": "Get All POIs",
-          "request": {
-            "method": "GET",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois"]
-            }
-          }
-        },
-        {
-          "name": "Create POI",
+          "name": "Queue POI TTS Generation [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": { \"vi\": \"Chùa A\", \"en\": \"Pagoda A\" },\n  \"description\": { \"vi\": \"Mô tả ngắn\", \"en\": \"Short Desc\" },\n  \"latitude\": 20.0,\n  \"longitude\": 105.0,\n  \"type\": \"HISTORICAL_SITE\"\n}"
-            },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois"]
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{id}}/audio/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{id}}",
+                "audio",
+                "generate"
+              ]
             }
           }
         },
         {
-          "name": "Get POI By Id",
+          "name": "List POIs For Admin [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
+              "raw": "{{baseUrl}}/api/v1/admin/pois",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois"
+              ]
             }
           }
         },
         {
-          "name": "Update POI",
+          "name": "Create POI [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"any\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Publish POI [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{id}}/publish",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{id}}",
+                "publish"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get POI Detail For Admin [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update POI [PUT]",
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{id}}"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": { \"vi\": \"Chùa A cập nhật\", \"en\": \"Pagoda A Updated\" },\n  \"description\": { \"vi\": \"Mô tả mới\", \"en\": \"Updated description\" },\n  \"latitude\": 20.001,\n  \"longitude\": 105.001\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
+              "raw": "{\n  \"reason\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Delete POI",
+          "name": "Delete POI [DELETE]",
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}"]
-            }
-          }
-        },
-        {
-          "name": "Publish POI",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/publish",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "publish"]
-            }
-          }
-        },
-        {
-          "name": "Generate POI Audio",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/audio/generate",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "audio", "generate"]
-            }
-          }
-        },
-        {
-          "name": "Upload POI Image",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "image",
-                  "type": "file",
-                  "src": ""
-                }
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{id}}"
               ]
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/image/upload",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "pois", "{{poiId}}", "image", "upload"]
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Create Tour",
+          "name": "Create Tour [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": { \"vi\": \"Tour Chùa\", \"en\": \"Pagoda Tour\" },\n  \"description\": { \"vi\": \"Mô tả tour\", \"en\": \"Tour description\" },\n  \"durationMinutes\": 90,\n  \"poiIds\": [\"{{poiId}}\"]\n}"
-            },
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tours",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tours"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tours"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Get Tour By Id",
+          "name": "Get Tour Detail For Admin [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tours",
+                "{{id}}"
+              ]
             }
           }
         },
         {
-          "name": "Update Tour",
+          "name": "Update Tour [PUT]",
           "request": {
             "method": "PUT",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tours",
+                "{{id}}"
+              ]
+            },
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": { \"vi\": \"Tour cập nhật\", \"en\": \"Updated tour\" },\n  \"description\": { \"vi\": \"Mô tả mới\", \"en\": \"New description\" },\n  \"durationMinutes\": 120\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
+              "raw": "{\n  \"reason\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Delete Tour",
+          "name": "Delete Tour [DELETE]",
           "request": {
             "method": "DELETE",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tours", "{{tourId}}"]
-            }
-          }
-        },
-        {
-          "name": "Upload Tour Image",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
-            ],
-            "body": {
-              "mode": "formdata",
-              "formdata": [
-                {
-                  "key": "image",
-                  "type": "file",
-                  "src": ""
-                }
+              "raw": "{{baseUrl}}/api/v1/admin/tours/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tours",
+                "{{id}}"
               ]
             },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/tours/{{tourId}}/image/upload",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tours", "{{tourId}}", "image", "upload"]
-            }
-          }
-        },
-        {
-          "name": "Maintenance Cleanup Soft Delete POIs",
-          "request": {
-            "method": "POST",
-            "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" },
-              { "key": "Content-Type", "value": "application/json" }
-            ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"dryRun\": true\n}"
-            },
-            "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/maintenance/pois/soft-delete-cleanup",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "maintenance", "pois", "soft-delete-cleanup"]
+              "raw": "{\n  \"reason\": \"any\"\n}"
             }
           }
         },
         {
-          "name": "Invalidate Sync Manifest",
+          "name": "List Approval Requests (Admin) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests?status=PENDING&entityType=POI&actionType=CREATE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "entityType",
+                  "value": "POI"
+                },
+                {
+                  "key": "actionType",
+                  "value": "CREATE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create Approval Request [POST]",
           "request": {
             "method": "POST",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"entityType\": \"POI\",\n  \"actionType\": \"CREATE\",\n  \"targetId\": \"string\",\n  \"payload\": {},\n  \"reason\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "List My Approval Requests (Partner) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/mine?status=PENDING&entityType=POI&actionType=CREATE",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "mine"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "entityType",
+                  "value": "POI"
+                },
+                {
+                  "key": "actionType",
+                  "value": "CREATE"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get My Approval Request Detail (Partner) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/mine/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "mine",
+                "{{id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get Approval Request Detail (Admin) [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/{{id}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "{{id}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve Approval Request [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/{{id}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "{{id}}",
+                "approve"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionNote\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Reject Approval Request [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/{{id}}/reject",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "approval-requests",
+                "{{id}}",
+                "reject"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decisionNote\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Run POI Retention Cleanup [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/maintenance/pois/soft-delete-cleanup",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "maintenance",
+                "pois",
+                "soft-delete-cleanup"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dryRun\": true,\n  \"reason\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Invalidate Sync Manifest [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/sync/invalidate",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "sync", "invalidate"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "sync",
+                "invalidate"
+              ]
             }
           }
         },
         {
-          "name": "Status TTS Queue",
+          "name": "Get TTS Queue Status [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tts/queue/status",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tts", "queue", "status"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tts",
+                "queue",
+                "status"
+              ]
             }
           }
         },
         {
-          "name": "Validate TTS Config",
+          "name": "Validate TTS Config [GET]",
           "request": {
             "method": "GET",
             "header": [
-              { "key": "Authorization", "value": "Bearer {{token}}" }
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
             ],
             "url": {
               "raw": "{{baseUrl}}/api/v1/admin/tts/config/validate",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "admin", "tts", "config", "validate"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tts",
+                "config",
+                "validate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Users For Admin [GET]",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users?role=USER",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "USER"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Assign User Role [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{id}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{id}}",
+                "role"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"USER\",\n  \"reason\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Revoke Elevated Role [POST]",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/users/{{id}}/role/revoke",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{id}}",
+                "role",
+                "revoke"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"string\"\n}"
             }
           }
         }
@@ -703,13 +2124,16 @@
       "name": "System",
       "item": [
         {
-          "name": "Health Check",
+          "name": "Health Check [GET]",
           "request": {
             "method": "GET",
+            "header": [],
             "url": {
               "raw": "{{baseUrl}}/",
-              "host": ["{{baseUrl}}"],
-              "path": [""]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": []
             }
           }
         }
@@ -721,14 +2145,18 @@
       "listen": "prerequest",
       "script": {
         "type": "text/javascript",
-        "exec": [""]
+        "exec": [
+          ""
+        ]
       }
     },
     {
       "listen": "test",
       "script": {
         "type": "text/javascript",
-        "exec": [""]
+        "exec": [
+          ""
+        ]
       }
     }
   ],
@@ -749,6 +2177,11 @@
       "type": "string"
     },
     {
+      "key": "id",
+      "value": "resource-id",
+      "type": "string"
+    },
+    {
       "key": "poiId",
       "value": "poi-id-here",
       "type": "string"
@@ -759,13 +2192,43 @@
       "type": "string"
     },
     {
-      "key": "idempotencyKey",
-      "value": "idem-key-001",
+      "key": "approvalRequestId",
+      "value": "approval-request-id-here",
       "type": "string"
     },
     {
-      "key": "callbackTimestamp",
-      "value": "1712390400000",
+      "key": "partnerEmail",
+      "value": "partner@phoamthuc.local",
+      "type": "string"
+    },
+    {
+      "key": "partnerPassword",
+      "value": "123321az",
+      "type": "string"
+    },
+    {
+      "key": "adminEmail",
+      "value": "admin@phoamthuc.local",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "123321az",
+      "type": "string"
+    },
+    {
+      "key": "partnerToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "approvedPoiId",
+      "value": "",
       "type": "string"
     }
   ]

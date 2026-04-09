@@ -5,6 +5,8 @@ import { cleanupPoiAudioFiles, enqueuePoiTtsGeneration } from './ttsService';
 import { removeCloudinaryImageByUrl } from './imageService';
 import { recordAdminAuditEvent } from './adminAuditService';
 
+type DbClient = Prisma.TransactionClient | typeof prisma;
+
 export interface PoiAdminListItem {
   id: string;
   name: unknown;
@@ -14,6 +16,8 @@ export interface PoiAdminListItem {
   longitude: number;
   type: PoiType;
   image: string | null;
+  radius: number;
+  creatorId: string | null;
   isPublished: boolean;
   publishedAt: string | null;
   deletedAt: string | null;
@@ -52,6 +56,8 @@ export interface PoiAdminCreateInput {
   latitude: unknown;
   longitude: unknown;
   type: unknown;
+  radius?: unknown;
+  creatorId?: string;
   image?: unknown;
   audioUrls?: unknown;
 }
@@ -66,6 +72,11 @@ export interface TourAdminCreateInput {
 
 export type PoiAdminUpdateInput = Partial<PoiAdminCreateInput>;
 export type TourAdminUpdateInput = Partial<TourAdminCreateInput>;
+
+export interface AdminRequestContext {
+  actorId: string;
+  role: string;
+}
 
 export interface AdminActionContext {
   actor?: string;
@@ -258,12 +269,12 @@ function normalizeDuration(value: unknown): number {
   return duration;
 }
 
-async function assertExistingPoiIds(poiIds: string[]): Promise<void> {
+async function assertExistingPoiIds(poiIds: string[], dbClient: DbClient = prisma): Promise<void> {
   if (poiIds.length === 0) {
     return;
   }
 
-  const existingPois = await prisma.pointOfInterest.findMany({
+  const existingPois = await dbClient.pointOfInterest.findMany({
     where: {
       id: { in: poiIds },
       deletedAt: null
@@ -280,6 +291,14 @@ async function assertExistingPoiIds(poiIds: string[]): Promise<void> {
   }
 }
 
+async function withOptionalTransaction<T>(dbClient: DbClient, executor: (tx: DbClient) => Promise<T>): Promise<T> {
+  if (dbClient === prisma) {
+    return prisma.$transaction(async (tx) => executor(tx as unknown as DbClient));
+  }
+
+  return executor(dbClient);
+}
+
 function toAdminPoiRecord(poi: {
   id: string;
   name: unknown;
@@ -289,6 +308,8 @@ function toAdminPoiRecord(poi: {
   longitude: unknown;
   type: PoiType;
   image: string | null;
+  radius: number;
+  creatorId: string | null;
   isPublished: boolean;
   publishedAt: Date | null;
   deletedAt: Date | null;
@@ -305,6 +326,8 @@ function toAdminPoiRecord(poi: {
     longitude: Number(poi.longitude),
     type: poi.type,
     image: poi.image,
+    radius: poi.radius,
+    creatorId: poi.creatorId,
     isPublished: poi.isPublished,
     publishedAt: poi.publishedAt?.toISOString() ?? null,
     deletedAt: poi.deletedAt?.toISOString() ?? null,
@@ -348,9 +371,14 @@ function toAdminTourRecord(tour: {
   };
 }
 
-export async function listAdminPois(): Promise<PoiAdminListItem[]> {
+export async function listAdminPois(authContext: AdminRequestContext): Promise<PoiAdminListItem[]> {
+  const where: Prisma.PointOfInterestWhereInput = { deletedAt: null };
+  if (authContext.role === 'PARTNER') {
+    where.creatorId = authContext.actorId;
+  }
+
   const pois = await prisma.pointOfInterest.findMany({
-    where: { deletedAt: null },
+    where,
     orderBy: [{ updatedAt: 'desc' }, { id: 'asc' }],
     select: {
       id: true,
@@ -361,6 +389,8 @@ export async function listAdminPois(): Promise<PoiAdminListItem[]> {
       longitude: true,
       type: true,
       image: true,
+      radius: true,
+      creatorId: true,
       isPublished: true,
       publishedAt: true,
       deletedAt: true,
@@ -373,7 +403,7 @@ export async function listAdminPois(): Promise<PoiAdminListItem[]> {
   return pois.map((poi) => toAdminPoiRecord(poi));
 }
 
-export async function getAdminPoiById(poiId: string): Promise<PoiAdminListItem> {
+export async function getAdminPoiById(poiId: string, authContext: AdminRequestContext): Promise<PoiAdminListItem> {
   const poi = await prisma.pointOfInterest.findFirst({
     where: { id: poiId, deletedAt: null },
     select: {
@@ -385,6 +415,8 @@ export async function getAdminPoiById(poiId: string): Promise<PoiAdminListItem> 
       longitude: true,
       type: true,
       image: true,
+      radius: true,
+      creatorId: true,
       isPublished: true,
       publishedAt: true,
       deletedAt: true,
@@ -398,16 +430,26 @@ export async function getAdminPoiById(poiId: string): Promise<PoiAdminListItem> 
     throw new ApiError(404, 'Không tìm thấy POI.');
   }
 
+  if (authContext.role === 'PARTNER' && poi.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền truy cập POI này.');
+  }
+
   return toAdminPoiRecord(poi);
 }
 
-export async function createAdminPoi(input: PoiAdminCreateInput, context?: AdminActionContext): Promise<PoiAdminListItem> {
+export async function createAdminPoi(
+  input: PoiAdminCreateInput,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<PoiAdminListItem> {
   const name = normalizeTextMap(input.name, 'name');
   const description = normalizeTextMap(input.description, 'description');
   assertMatchingLanguageSets(name, description);
   const latitude = normalizeNumericField(input.latitude, 'latitude');
   const longitude = normalizeNumericField(input.longitude, 'longitude');
   const type = normalizePoiType(input.type);
+  const radius = input.radius !== undefined ? normalizeNumericField(input.radius, 'radius') : 50;
+  const creatorId = input.creatorId ?? null;
   const image = normalizeNullableString(input.image) ?? null;
   const audioUrls = normalizeAudioUrls(input.audioUrls);
   assertAudioUrlsAligned(audioUrls, description);
@@ -416,7 +458,7 @@ export async function createAdminPoi(input: PoiAdminCreateInput, context?: Admin
     throw new ApiError(400, 'latitude/longitude nằm ngoài phạm vi hợp lệ.');
   }
 
-  const poi = await prisma.pointOfInterest.create({
+  const poi = await dbClient.pointOfInterest.create({
     data: {
       name,
       description,
@@ -424,7 +466,11 @@ export async function createAdminPoi(input: PoiAdminCreateInput, context?: Admin
       latitude,
       longitude,
       type,
-      image
+      image,
+      radius,
+      creatorId,
+      isPublished: true,
+      publishedAt: new Date()
     },
     select: {
       id: true,
@@ -435,6 +481,8 @@ export async function createAdminPoi(input: PoiAdminCreateInput, context?: Admin
       longitude: true,
       type: true,
       image: true,
+      radius: true,
+      creatorId: true,
       isPublished: true,
       publishedAt: true,
       deletedAt: true,
@@ -461,16 +509,21 @@ export async function createAdminPoi(input: PoiAdminCreateInput, context?: Admin
   return toAdminPoiRecord(poi);
 }
 
-export async function createAdminTour(input: TourAdminCreateInput, context?: AdminActionContext): Promise<TourAdminItem> {
+export async function createAdminTour(
+  input: TourAdminCreateInput & { creatorId?: string },
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<TourAdminItem> {
   const name = normalizeTextMap(input.name, 'name');
   const description = normalizeTextMap(input.description, 'description');
   assertMatchingLanguageSets(name, description);
   const poiIds = normalizePoiIds(input.poiIds, 'poiIds');
-  await assertExistingPoiIds(poiIds);
+  await assertExistingPoiIds(poiIds, dbClient);
   const duration = normalizeDuration(input.duration);
   const image = normalizeNullableString(input.image) ?? null;
+  const creatorId = input.creatorId ?? null;
 
-  const tour = await prisma.$transaction(async (tx) => {
+  const tour = await withOptionalTransaction(dbClient, async (tx) => {
     const createdTour = await tx.tour.create({
       data: {
         name,
@@ -478,6 +531,7 @@ export async function createAdminTour(input: TourAdminCreateInput, context?: Adm
         duration,
         poiIds: poiIds as unknown as Prisma.InputJsonValue,
         image,
+        creatorId,
         isPublished: true,
         publishedAt: new Date()
       },
@@ -518,8 +572,14 @@ export async function createAdminTour(input: TourAdminCreateInput, context?: Adm
   return toAdminTourRecord(tour);
 }
 
-export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, context?: AdminActionContext): Promise<PoiAdminListItem> {
-  const existingPoi = await prisma.pointOfInterest.findFirst({
+export async function updateAdminPoi(
+  poiId: string,
+  input: PoiAdminUpdateInput,
+  authContext: AdminRequestContext,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<PoiAdminListItem> {
+  const existingPoi = await dbClient.pointOfInterest.findFirst({
     where: { id: poiId, deletedAt: null },
     select: {
       id: true,
@@ -529,6 +589,8 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
       latitude: true,
       longitude: true,
       type: true,
+      radius: true,
+      creatorId: true,
       image: true
     }
   });
@@ -537,11 +599,23 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
     throw new ApiError(404, 'Không tìm thấy POI.');
   }
 
+  if (authContext.role === 'PARTNER' && existingPoi.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền sửa POI này.');
+  }
+
   const name = input.name !== undefined ? normalizeTextMap(input.name, 'name') : undefined;
   const description = input.description !== undefined ? normalizeTextMap(input.description, 'description') : undefined;
   const latitude = input.latitude !== undefined ? normalizeNumericField(input.latitude, 'latitude') : undefined;
   const longitude = input.longitude !== undefined ? normalizeNumericField(input.longitude, 'longitude') : undefined;
   const type = input.type !== undefined ? normalizePoiType(input.type) : undefined;
+  const radius = input.radius !== undefined ? normalizeNumericField(input.radius, 'radius') : undefined;
+
+  // Prevent PARTNERs from transferring ownership to someone else
+  let creatorId = input.creatorId !== undefined ? input.creatorId : undefined;
+  if (authContext.role === 'PARTNER' && creatorId !== undefined && creatorId !== existingPoi.creatorId) {
+    creatorId = existingPoi.creatorId ?? undefined; // Ignore modifications
+  }
+
   const image = input.image !== undefined ? normalizeNullableString(input.image) : undefined;
   const audioUrls = input.audioUrls !== undefined ? normalizeAudioUrls(input.audioUrls) : undefined;
 
@@ -561,7 +635,7 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
     throw new ApiError(400, 'longitude nằm ngoài phạm vi hợp lệ.');
   }
 
-  const updatedPoi = await prisma.pointOfInterest.update({
+  const updatedPoi = await dbClient.pointOfInterest.update({
     where: { id: poiId },
     data: {
       name,
@@ -570,9 +644,9 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
       longitude,
       type,
       image,
+      radius,
+      creatorId,
       audioUrls,
-      isPublished: false,
-      publishedAt: null,
       contentVersion: {
         increment: 1
       }
@@ -586,6 +660,8 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
       longitude: true,
       type: true,
       image: true,
+      radius: true,
+      creatorId: true,
       isPublished: true,
       publishedAt: true,
       deletedAt: true,
@@ -622,7 +698,7 @@ export async function updateAdminPoi(poiId: string, input: PoiAdminUpdateInput, 
   return toAdminPoiRecord(updatedPoi);
 }
 
-export async function getAdminTourById(tourId: string): Promise<TourAdminItem> {
+export async function getAdminTourById(tourId: string, authContext: AdminRequestContext): Promise<TourAdminItem> {
   const tour = await prisma.tour.findFirst({
     where: { id: tourId, deletedAt: null },
     select: {
@@ -632,6 +708,7 @@ export async function getAdminTourById(tourId: string): Promise<TourAdminItem> {
       duration: true,
       poiIds: true,
       image: true,
+      creatorId: true,
       isPublished: true,
       publishedAt: true,
       deletedAt: true,
@@ -645,11 +722,21 @@ export async function getAdminTourById(tourId: string): Promise<TourAdminItem> {
     throw new ApiError(404, 'Không tìm thấy Tour.');
   }
 
+  if (authContext.role === 'PARTNER' && tour.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền truy cập Tour này.');
+  }
+
   return toAdminTourRecord(tour);
 }
 
-export async function updateAdminTour(tourId: string, input: TourAdminUpdateInput, context?: AdminActionContext): Promise<TourAdminItem> {
-  const existingTour = await prisma.tour.findFirst({
+export async function updateAdminTour(
+  tourId: string,
+  input: TourAdminUpdateInput,
+  authContext: AdminRequestContext,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<TourAdminItem> {
+  const existingTour = await dbClient.tour.findFirst({
     where: { id: tourId, deletedAt: null },
     select: {
       id: true,
@@ -657,12 +744,17 @@ export async function updateAdminTour(tourId: string, input: TourAdminUpdateInpu
       description: true,
       duration: true,
       poiIds: true,
+      creatorId: true,
       image: true
     }
   });
 
   if (!existingTour) {
     throw new ApiError(404, 'Không tìm thấy Tour.');
+  }
+
+  if (authContext.role === 'PARTNER' && existingTour.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền sửa Tour này.');
   }
 
   const name = input.name !== undefined ? normalizeTextMap(input.name, 'name') : undefined;
@@ -676,10 +768,10 @@ export async function updateAdminTour(tourId: string, input: TourAdminUpdateInpu
   assertMatchingLanguageSets(mergedName, mergedDescription);
 
   if (poiIds !== undefined) {
-    await assertExistingPoiIds(poiIds);
+    await assertExistingPoiIds(poiIds, dbClient);
   }
 
-  const tour = await prisma.$transaction(async (tx) => {
+  const tour = await withOptionalTransaction(dbClient, async (tx) => {
     const updatedTour = await tx.tour.update({
       where: { id: tourId },
       data: {
@@ -731,14 +823,14 @@ export async function updateAdminTour(tourId: string, input: TourAdminUpdateInpu
   return toAdminTourRecord(tour);
 }
 
-async function bumpSyncVersion(tx: Prisma.TransactionClient): Promise<number> {
-  const existingSetting = await tx.appSetting.findUnique({
+async function bumpSyncVersion(dbClient: DbClient): Promise<number> {
+  const existingSetting = await dbClient.appSetting.findUnique({
     where: { id: 1 },
     select: { currentVersion: true }
   });
 
   if (!existingSetting) {
-    const created = await tx.appSetting.create({
+    const created = await dbClient.appSetting.create({
       data: {
         id: 1,
         currentVersion: 2
@@ -751,7 +843,7 @@ async function bumpSyncVersion(tx: Prisma.TransactionClient): Promise<number> {
     return created.currentVersion;
   }
 
-  const updated = await tx.appSetting.update({
+  const updated = await dbClient.appSetting.update({
     where: { id: 1 },
     data: {
       currentVersion: {
@@ -766,8 +858,12 @@ async function bumpSyncVersion(tx: Prisma.TransactionClient): Promise<number> {
   return updated.currentVersion;
 }
 
-export async function publishAdminPoi(poiId: string, context?: AdminActionContext): Promise<PublishAdminPoiResult> {
-  const existingPoi = await prisma.pointOfInterest.findFirst({
+export async function publishAdminPoi(
+  poiId: string,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<PublishAdminPoiResult> {
+  const existingPoi = await dbClient.pointOfInterest.findFirst({
     where: { id: poiId, deletedAt: null },
     select: { id: true }
   });
@@ -776,7 +872,7 @@ export async function publishAdminPoi(poiId: string, context?: AdminActionContex
     throw new ApiError(404, 'Không tìm thấy POI.');
   }
 
-  const result = await prisma.$transaction(async (tx) => {
+  const result = await withOptionalTransaction(dbClient, async (tx) => {
     const updatedPoi = await tx.pointOfInterest.update({
       where: { id: poiId },
       data: {
@@ -792,6 +888,8 @@ export async function publishAdminPoi(poiId: string, context?: AdminActionContex
         longitude: true,
         type: true,
         image: true,
+        radius: true,
+        creatorId: true,
         isPublished: true,
         publishedAt: true,
         deletedAt: true,
@@ -826,8 +924,8 @@ export async function publishAdminPoi(poiId: string, context?: AdminActionContex
   return result;
 }
 
-export async function invalidateSyncManifest(): Promise<InvalidateSyncResult> {
-  const syncVersion = await prisma.$transaction(async (tx) => bumpSyncVersion(tx));
+export async function invalidateSyncManifest(dbClient: DbClient = prisma): Promise<InvalidateSyncResult> {
+  const syncVersion = await withOptionalTransaction(dbClient, async (tx) => bumpSyncVersion(tx));
 
   return {
     invalidated: true,
@@ -835,17 +933,26 @@ export async function invalidateSyncManifest(): Promise<InvalidateSyncResult> {
   };
 }
 
-export async function deleteAdminPoi(poiId: string, context?: AdminActionContext): Promise<PoiAdminListItem> {
-  const existingPoi = await prisma.pointOfInterest.findFirst({
+export async function deleteAdminPoi(
+  poiId: string,
+  authContext: AdminRequestContext,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<PoiAdminListItem> {
+  const existingPoi = await dbClient.pointOfInterest.findFirst({
     where: { id: poiId, deletedAt: null },
-    select: { id: true }
+    select: { id: true, creatorId: true }
   });
 
   if (!existingPoi) {
     throw new ApiError(404, 'Không tìm thấy POI.');
   }
 
-  const relatedTours = await prisma.tour.findMany({
+  if (authContext.role === 'PARTNER' && existingPoi.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền xóa POI này.');
+  }
+
+  const relatedTours = await dbClient.tour.findMany({
     where: { deletedAt: null },
     select: {
       id: true,
@@ -855,7 +962,7 @@ export async function deleteAdminPoi(poiId: string, context?: AdminActionContext
 
   const toursToUpdate = relatedTours.filter((tour) => Array.isArray(tour.poiIds) && tour.poiIds.some((value) => value === poiId));
 
-  const deletedPoi = await prisma.$transaction(async (tx) => {
+  const deletedPoi = await withOptionalTransaction(dbClient, async (tx) => {
     const updatedPoi = await tx.pointOfInterest.update({
       where: { id: poiId },
       data: {
@@ -875,6 +982,8 @@ export async function deleteAdminPoi(poiId: string, context?: AdminActionContext
         longitude: true,
         type: true,
         image: true,
+        radius: true,
+        creatorId: true,
         isPublished: true,
         publishedAt: true,
         deletedAt: true,
@@ -922,17 +1031,26 @@ export async function deleteAdminPoi(poiId: string, context?: AdminActionContext
   return toAdminPoiRecord(deletedPoi);
 }
 
-export async function deleteAdminTour(tourId: string, context?: AdminActionContext): Promise<TourAdminItem> {
-  const existingTour = await prisma.tour.findFirst({
+export async function deleteAdminTour(
+  tourId: string,
+  authContext: AdminRequestContext,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma
+): Promise<TourAdminItem> {
+  const existingTour = await dbClient.tour.findFirst({
     where: { id: tourId, deletedAt: null },
-    select: { id: true }
+    select: { id: true, creatorId: true }
   });
 
   if (!existingTour) {
     throw new ApiError(404, 'Không tìm thấy Tour.');
   }
 
-  const deletedTour = await prisma.$transaction(async (tx) => {
+  if (authContext.role === 'PARTNER' && existingTour.creatorId !== authContext.actorId) {
+    throw new ApiError(403, 'Không có quyền xóa Tour này.');
+  }
+
+  const deletedTour = await withOptionalTransaction(dbClient, async (tx) => {
     const updatedTour = await tx.tour.update({
       where: { id: tourId },
       data: {

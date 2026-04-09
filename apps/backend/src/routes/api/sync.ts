@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { getSyncFull, getSyncManifest, getSyncIncremental } from '../../services/syncService';
 import { isUserPremium } from '../../services/authService';
-import { requireAuth, AuthRequest } from '../../middlewares/authMiddleware';
+import { requireAuth, requireRole, AuthRequest } from '../../middlewares/authMiddleware';
 import asyncHandler from '../../utils/asyncHandler';
 import ApiError from '../../utils/ApiError';
 
@@ -30,6 +30,7 @@ function requireUserId(req: AuthRequest): string {
 router.get(
   '/manifest',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req: AuthRequest, res) => {
     const userId = requireUserId(req);
     const isPremium = await isUserPremium(userId);
@@ -54,6 +55,7 @@ router.get(
 router.get(
   '/full',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req: AuthRequest, res) => {
     const userId = requireUserId(req);
     const isPremium = await isUserPremium(userId);
@@ -103,6 +105,7 @@ router.get(
 router.post(
   '/incremental',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req: AuthRequest, res) => {
     const userId = requireUserId(req);
     const isPremium = await isUserPremium(userId);

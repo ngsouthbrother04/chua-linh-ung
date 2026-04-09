@@ -63,13 +63,16 @@ describe('poiAdminService', () => {
       updatedAt: new Date('2026-03-25T00:00:00Z')
     } as never);
 
-    const result = await createAdminPoi({
-      name: { vi: 'Phở Thìn' },
-      description: { vi: 'Nổi tiếng' },
-      latitude: '21.01',
-      longitude: 105.85,
-      type: 'FOOD'
-    });
+    const result = await createAdminPoi(
+      {
+        name: { vi: 'Phở Thìn' },
+        description: { vi: 'Nổi tiếng' },
+        latitude: '21.01',
+        longitude: 105.85,
+        type: 'FOOD'
+      },
+      { actor: 'admin-1', source: 'test' }
+    );
 
     expect(result.id).toBe('poi-1');
     expect(prisma.pointOfInterest.create).toHaveBeenCalledTimes(1);
@@ -97,26 +100,32 @@ describe('poiAdminService', () => {
 
   it('createAdminPoi should reject mismatched language sets between name and description', async () => {
     await expect(
-      createAdminPoi({
-        name: { vi: 'Phở Thìn', en: 'Pho Thin' },
-        description: { vi: 'Nổi tiếng' },
-        latitude: 21.01,
-        longitude: 105.85,
-        type: 'FOOD'
-      })
+      createAdminPoi(
+        {
+          name: { vi: 'Phở Thìn', en: 'Pho Thin' },
+          description: { vi: 'Nổi tiếng' },
+          latitude: 21.01,
+          longitude: 105.85,
+          type: 'FOOD'
+        },
+        { actor: 'admin-1', source: 'test' }
+      )
     ).rejects.toThrow('name và description phải có cùng tập ngôn ngữ.');
   });
 
   it('createAdminPoi should reject audioUrls outside localized text languages', async () => {
     await expect(
-      createAdminPoi({
-        name: { vi: 'Phở Thìn' },
-        description: { vi: 'Nổi tiếng' },
-        audioUrls: { en: '/audio/poi-en.mp3' },
-        latitude: 21.01,
-        longitude: 105.85,
-        type: 'FOOD'
-      })
+      createAdminPoi(
+        {
+          name: { vi: 'Phở Thìn' },
+          description: { vi: 'Nổi tiếng' },
+          audioUrls: { en: '/audio/poi-en.mp3' },
+          latitude: 21.01,
+          longitude: 105.85,
+          type: 'FOOD'
+        },
+        { actor: 'admin-1', source: 'test' }
+      )
     ).rejects.toThrow('audioUrls phải khớp toàn bộ ngôn ngữ của name/description.');
   });
 
@@ -140,7 +149,7 @@ describe('poiAdminService', () => {
       } as never
     ]);
 
-    const result = await listAdminPois();
+    const result = await listAdminPois({ actorId: 'admin-1', role: 'ADMIN' });
 
     expect(result).toHaveLength(1);
     expect(prisma.pointOfInterest.findMany).toHaveBeenCalledWith(
@@ -178,11 +187,15 @@ describe('poiAdminService', () => {
       updatedAt: new Date('2026-03-26T00:00:00Z')
     } as never);
 
-    const result = await updateAdminPoi('poi-1', {
-      name: { vi: 'Phở Thìn mới' },
-      latitude: 21.02,
-      longitude: 105.86
-    });
+    const result = await updateAdminPoi(
+      'poi-1',
+      {
+        name: { vi: 'Phở Thìn mới' },
+        latitude: 21.02,
+        longitude: 105.86
+      },
+      { actorId: 'admin-1', role: 'ADMIN' }
+    );
 
     expect(result.contentVersion).toBe(2);
     expect(prisma.pointOfInterest.update).toHaveBeenCalledTimes(1);
@@ -197,6 +210,28 @@ describe('poiAdminService', () => {
         }
       }
     });
+  });
+
+  it('updateAdminPoi should reject PARTNER attempting to update POI created by another user', async () => {
+    vi.mocked(prisma.pointOfInterest.findFirst).mockResolvedValue({
+      id: 'poi-1',
+      creatorId: 'another-partner',
+      name: { vi: 'Phở Thìn' },
+      description: { vi: 'Nổi tiếng' },
+      audioUrls: {},
+      latitude: 21.01,
+      longitude: 105.85,
+      type: 'FOOD',
+      image: null
+    } as never);
+
+    await expect(
+      updateAdminPoi(
+        'poi-1',
+        { name: { vi: 'Phở Thìn mới' } },
+        { actorId: 'partner-1', role: 'PARTNER' }
+      )
+    ).rejects.toThrow('Không có quyền sửa POI này.');
   });
 
   it('deleteAdminPoi should soft delete and increment version', async () => {
@@ -230,7 +265,7 @@ describe('poiAdminService', () => {
     vi.mocked(prisma.appSetting.findUnique).mockResolvedValue({ currentVersion: 10 } as never);
     vi.mocked(prisma.appSetting.update).mockResolvedValue({ currentVersion: 11 } as never);
 
-    const result = await deleteAdminPoi('poi-1');
+    const result = await deleteAdminPoi('poi-1', { actorId: 'admin-1', role: 'ADMIN' });
 
     expect(result.deletedAt).toContain('2026-03-26');
     expect(prisma.tour.update).toHaveBeenCalledTimes(1);
@@ -269,6 +304,24 @@ describe('poiAdminService', () => {
     );
   });
 
+  it('deleteAdminPoi should reject PARTNER attempting to delete POI created by another user', async () => {
+    vi.mocked(prisma.pointOfInterest.findFirst).mockResolvedValue({
+      id: 'poi-1',
+      creatorId: 'another-partner',
+      name: { vi: 'Phở Thìn' },
+      description: { vi: 'Nổi tiếng' },
+      audioUrls: {},
+      latitude: 21.01,
+      longitude: 105.85,
+      type: 'FOOD',
+      image: null
+    } as never);
+
+    await expect(
+      deleteAdminPoi('poi-1', { actorId: 'partner-1', role: 'PARTNER' })
+    ).rejects.toThrow('Không có quyền xóa POI này.');
+  });
+
   it('publishAdminPoi should mark POI published and bump sync version', async () => {
     vi.mocked(prisma.pointOfInterest.findFirst).mockResolvedValue({ id: 'poi-1' } as never);
     vi.mocked(prisma.pointOfInterest.update).mockResolvedValue({
@@ -291,7 +344,7 @@ describe('poiAdminService', () => {
     vi.mocked(prisma.appSetting.update).mockResolvedValue({ currentVersion: 11 } as never);
 
     const { publishAdminPoi } = await import('../src/services/poiAdminService');
-    const result = await publishAdminPoi('poi-1');
+    const result = await publishAdminPoi('poi-1', { actor: 'admin-1', source: 'test' });
 
     expect(result.isPublished).toBe(true);
     expect(result.syncVersion).toBe(11);

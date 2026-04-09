@@ -46,6 +46,18 @@ describeIfDb('ADMIN tour CRUD integration', () => {
         features: true
       }
     });
+
+    await prisma.user.upsert({
+      where: { id: 'integration-admin' },
+      update: { role: 'ADMIN', email: 'admin@integration.test' },
+      create: {
+        id: 'integration-admin',
+        email: 'admin@integration.test',
+        passwordHash: 'dummy',
+        fullName: 'Integration Admin',
+        role: 'ADMIN'
+      }
+    });
   });
 
   beforeEach(async () => {
@@ -160,6 +172,10 @@ describeIfDb('ADMIN tour CRUD integration', () => {
         process.env[key] = value;
       }
     }
+
+    await prisma.user.deleteMany({
+      where: { id: 'integration-admin' }
+    });
 
     await prisma.$disconnect();
   });

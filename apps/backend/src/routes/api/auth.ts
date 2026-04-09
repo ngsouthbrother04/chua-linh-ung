@@ -11,7 +11,7 @@ import {
   revokeAuthSessionByAccessToken
 } from '../../services/authService';
 import { verifyVNPaySignature, verifyMoMoSignature } from '../../utils/paymentVerifier';
-import { requireAuth, AuthRequest } from '../../middlewares/authMiddleware';
+import { requireAuth, requireRole, AuthRequest } from '../../middlewares/authMiddleware';
 import asyncHandler from '../../utils/asyncHandler';
 import ApiError from '../../utils/ApiError';
 
@@ -127,6 +127,7 @@ router.post(
 router.post(
   '/payment/claim',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req: AuthRequest, res) => {
     const claimCodeRaw = req.body?.code || req.body?.claimCode || '';
     if (!claimCodeRaw) {
@@ -196,6 +197,7 @@ router.post(
 router.post(
   '/payment/initiate',
   requireAuth,
+  requireRole(['USER']),
   asyncHandler(async (req: AuthRequest, res) => {
     const providerRaw =
       typeof req.body?.paymentMethod === 'string'

@@ -1,5 +1,4 @@
-import { type RequestHandler, Router } from 'express';
-import multer from 'multer';
+import { Router } from 'express';
 import asyncHandler from '../../utils/asyncHandler';
 import ApiError from '../../utils/ApiError';
 import { getCurrentUserRole, isAccessTokenSessionActive, verifyJwt } from '../../services/authService';
@@ -17,17 +16,19 @@ import {
   updateAdminPoi,
   updateAdminTour
 } from '../../services/poiAdminService';
+import {
+  approvePartnerRequest,
+  createPartnerApprovalRequest,
+  getApprovalRequestById,
+  getApprovalRequestByIdForRequester,
+  listApprovalRequests,
+  listApprovalRequestsByRequester,
+  rejectPartnerRequest
+} from '../../services/partnerApprovalService';
 import { enqueuePoiTtsGeneration, getTtsQueueStatus, validateTtsRuntimeConfig } from '../../services/ttsService';
-import { uploadPoiImage, uploadTourImage } from '../../services/imageService';
 import { assignAdminUserRole, listAdminUsers, revokeAdminUserRole } from '../../services/adminUserRoleService';
 
 const router = Router();
-const imageUpload = multer({
-  storage: multer.memoryStorage(),
-  limits: {
-    fileSize: Number(process.env.CLOUDINARY_MAX_IMAGE_BYTES ?? 5 * 1024 * 1024)
-  }
-});
 
 async function assertAdminAccess(req: { headers: Record<string, unknown> }): Promise<{ actorId: string }> {
   const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
@@ -52,6 +53,33 @@ async function assertAdminAccess(req: { headers: Record<string, unknown> }): Pro
   return { actorId };
 }
 
+async function assertElevatedAccess(
+  req: { headers: Record<string, unknown> },
+  allowedRoles: string[] = ['ADMIN', 'PARTNER']
+): Promise<{ actorId: string; role: string }> {
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
+  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+
+  if (!accessToken) {
+    throw new ApiError(403, 'Không có quyền truy cập endpoint.');
+  }
+
+  const payload = verifyJwt(accessToken) as { sub?: string; role?: string };
+  const isActive = await isAccessTokenSessionActive(accessToken);
+  if (!isActive || typeof payload.sub !== 'string' || !payload.sub.trim()) {
+    throw new ApiError(403, 'Phiên đăng nhập không hợp lệ.');
+  }
+
+  const actorId = payload.sub.trim();
+  const currentRole = await getCurrentUserRole(actorId);
+
+  if (!currentRole || !allowedRoles.includes(currentRole)) {
+    throw new ApiError(403, 'Không quyền truy cập endpoint.');
+  }
+
+  return { actorId, role: currentRole };
+}
+
 function getAdminActionContext(req: { headers: Record<string, unknown>; body?: unknown }) {
   const actor = typeof req.headers['x-admin-actor'] === 'string' ? req.headers['x-admin-actor'] : undefined;
   const reason =
@@ -65,22 +93,6 @@ function getAdminActionContext(req: { headers: Record<string, unknown>; body?: u
     source: 'api'
   };
 }
-
-const handleImageUpload: RequestHandler = (req, res, next) => {
-  imageUpload.single('image')(req, res, (err: unknown) => {
-    if (err instanceof multer.MulterError) {
-      if (err.code === 'LIMIT_FILE_SIZE') {
-        next(new ApiError(400, 'Kich thuoc anh vuot qua gioi han cho phep.'));
-        return;
-      }
-
-      next(new ApiError(400, 'Upload anh khong hop le.'));
-      return;
-    }
-
-    next(err);
-  });
-};
 
 /**
  * POST /api/v1/admin/pois/:id/audio/generate
@@ -114,91 +126,9 @@ router.post(
 );
 
 /**
- * POST /api/v1/admin/pois/:id/image/upload
- * @summary Upload POI image
- * @description Upload image file for a POI to image storage provider.
- * @tags Admin
- * @security bearerAuth
- * @param {string} id.path.required - POI identifier
- * @param {file} image.formData.required - Image file
- * @return {object} 200 - Upload successful
- * @return {object} 400 - Invalid file or missing input
- * @return {object} 403 - Forbidden
- * @return {object} 500 - Internal Server Error
- */
-
-router.post(
-  '/pois/:id/image/upload',
-  handleImageUpload,
-  asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
-
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
-    if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id cần upload ảnh.');
-    }
-
-    if (!req.file) {
-      throw new ApiError(400, 'Thiếu file ảnh với field image.');
-    }
-
-    if (!req.file.mimetype.startsWith('image/')) {
-      throw new ApiError(400, 'Chi chap nhan file anh hop le.');
-    }
-
-    const result = await uploadPoiImage(poiId, req.file);
-    return res.status(200).json({
-      message: 'Upload ảnh thành công.',
-      ...result
-    });
-  })
-);
-
-/**
- * POST /api/v1/admin/tours/:id/image/upload
- * @summary Upload tour image
- * @description Upload image file for a tour to image storage provider.
- * @tags Admin
- * @security bearerAuth
- * @param {string} id.path.required - Tour identifier
- * @param {file} image.formData.required - Image file
- * @return {object} 200 - Upload successful
- * @return {object} 400 - Invalid file or missing input
- * @return {object} 403 - Forbidden
- * @return {object} 500 - Internal Server Error
- */
-
-router.post(
-  '/tours/:id/image/upload',
-  handleImageUpload,
-  asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
-
-    const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
-    if (!tourId) {
-      throw new ApiError(400, 'Thiếu Tour id cần upload ảnh.');
-    }
-
-    if (!req.file) {
-      throw new ApiError(400, 'Thiếu file ảnh với field image.');
-    }
-
-    if (!req.file.mimetype.startsWith('image/')) {
-      throw new ApiError(400, 'Chi chap nhan file anh hop le.');
-    }
-
-    const result = await uploadTourImage(tourId, req.file);
-    return res.status(200).json({
-      message: 'Upload ảnh thành công.',
-      ...result
-    });
-  })
-);
-
-/**
  * POST /api/v1/admin/pois
- * @summary Create POI
- * @description Create a draft POI record with multilingual payload.
+ * @summary Submit POI create request
+ * @description PARTNER submits a POI create payload for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {object} request.body.required - POI create payload
@@ -211,12 +141,19 @@ router.post(
 router.post(
   '/pois',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
-    const result = await createAdminPoi(req.body ?? {}, getAdminActionContext(req as never));
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'POI',
+      actionType: 'CREATE',
+      payload: req.body ?? {},
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
     return res.status(201).json({
-      message: 'Tạo POI thành công.',
-      ...result
+      message: 'Đã gửi request tạo POI chờ ADMIN duyệt.',
+      ...requestItem
     });
   })
 );
@@ -271,9 +208,9 @@ router.post(
 router.get(
   '/pois',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
 
-    const items = await listAdminPois();
+    const items = await listAdminPois(auth);
     return res.status(200).json({
       items,
       total: items.length
@@ -298,14 +235,14 @@ router.get(
 router.get(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
       throw new ApiError(400, 'Thiếu POI id.');
     }
 
-    const result = await getAdminPoiById(poiId);
+    const result = await getAdminPoiById(poiId, auth);
     return res.status(200).json({
       ...result
     });
@@ -314,8 +251,8 @@ router.get(
 
 /**
  * PUT /api/v1/admin/pois/:id
- * @summary Update POI
- * @description Update POI fields in draft/admin context.
+ * @summary Submit POI update request
+ * @description PARTNER submits a POI update payload for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {string} id.path.required - POI identifier
@@ -330,25 +267,33 @@ router.get(
 router.put(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
       throw new ApiError(400, 'Thiếu POI id.');
     }
 
-    const result = await updateAdminPoi(poiId, req.body ?? {}, getAdminActionContext(req as never));
-    return res.status(200).json({
-      message: 'Cập nhật POI thành công.',
-      ...result
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'POI',
+      actionType: 'UPDATE',
+      targetId: poiId,
+      payload: req.body ?? {},
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
+    return res.status(201).json({
+      message: 'Đã gửi request cập nhật POI chờ ADMIN duyệt.',
+      ...requestItem
     });
   })
 );
 
 /**
  * DELETE /api/v1/admin/pois/:id
- * @summary Soft delete POI
- * @description Soft-delete POI and hide from sync outputs.
+ * @summary Submit POI delete request
+ * @description PARTNER submits a POI delete request for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {string} id.path.required - POI identifier
@@ -364,25 +309,32 @@ router.put(
 router.delete(
   '/pois/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
     const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!poiId) {
       throw new ApiError(400, 'Thiếu POI id.');
     }
 
-    const result = await deleteAdminPoi(poiId, getAdminActionContext(req as never));
-    return res.status(200).json({
-      message: 'Xóa POI thành công.',
-      ...result
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'POI',
+      actionType: 'DELETE',
+      targetId: poiId,
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
+    return res.status(201).json({
+      message: 'Đã gửi request xoá POI chờ ADMIN duyệt.',
+      ...requestItem
     });
   })
 );
 
 /**
  * POST /api/v1/admin/tours
- * @summary Create tour
- * @description Create a tour with ordered POI references.
+ * @summary Submit Tour create request
+ * @description PARTNER submits a Tour create payload for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {object} request.body.required - Tour create payload
@@ -395,12 +347,19 @@ router.delete(
 router.post(
   '/tours',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
-    const result = await createAdminTour(req.body ?? {}, getAdminActionContext(req as never));
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'TOUR',
+      actionType: 'CREATE',
+      payload: req.body ?? {},
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
     return res.status(201).json({
-      message: 'Tạo Tour thành công.',
-      ...result
+      message: 'Đã gửi request tạo Tour chờ ADMIN duyệt.',
+      ...requestItem
     });
   })
 );
@@ -422,14 +381,14 @@ router.post(
 router.get(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
       throw new ApiError(400, 'Thiếu Tour id.');
     }
 
-    const result = await getAdminTourById(tourId);
+    const result = await getAdminTourById(tourId, auth);
     return res.status(200).json({
       ...result
     });
@@ -438,8 +397,8 @@ router.get(
 
 /**
  * PUT /api/v1/admin/tours/:id
- * @summary Update tour
- * @description Update tour metadata and ordered POI references.
+ * @summary Submit Tour update request
+ * @description PARTNER submits a Tour update payload for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
@@ -454,25 +413,33 @@ router.get(
 router.put(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
       throw new ApiError(400, 'Thiếu Tour id.');
     }
 
-    const result = await updateAdminTour(tourId, req.body ?? {}, getAdminActionContext(req as never));
-    return res.status(200).json({
-      message: 'Cập nhật Tour thành công.',
-      ...result
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'TOUR',
+      actionType: 'UPDATE',
+      targetId: tourId,
+      payload: req.body ?? {},
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
+    return res.status(201).json({
+      message: 'Đã gửi request cập nhật Tour chờ ADMIN duyệt.',
+      ...requestItem
     });
   })
 );
 
 /**
  * DELETE /api/v1/admin/tours/:id
- * @summary Soft delete tour
- * @description Soft-delete a tour from admin CMS.
+ * @summary Submit Tour delete request
+ * @description PARTNER submits a Tour delete request for ADMIN review.
  * @tags Admin
  * @security bearerAuth
  * @param {string} id.path.required - Tour identifier
@@ -488,17 +455,173 @@ router.put(
 router.delete(
   '/tours/:id',
   asyncHandler(async (req, res) => {
-    await assertAdminAccess(req);
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
 
     const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
     if (!tourId) {
       throw new ApiError(400, 'Thiếu Tour id.');
     }
 
-    const result = await deleteAdminTour(tourId, getAdminActionContext(req as never));
+    const requestItem = await createPartnerApprovalRequest({
+      entityType: 'TOUR',
+      actionType: 'DELETE',
+      targetId: tourId,
+      requestedBy: auth.actorId,
+      reason: typeof req.body?.reason === 'string' ? req.body.reason : undefined
+    });
+
+    return res.status(201).json({
+      message: 'Đã gửi request xoá Tour chờ ADMIN duyệt.',
+      ...requestItem
+    });
+  })
+);
+
+router.post(
+  '/approval-requests',
+  asyncHandler(async (req, res) => {
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
+
+    const entityType = typeof req.body?.entityType === 'string' ? req.body.entityType : '';
+    const actionType = typeof req.body?.actionType === 'string' ? req.body.actionType : '';
+    const targetId = typeof req.body?.targetId === 'string' ? req.body.targetId : undefined;
+    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+    const payload = req.body?.payload;
+
+    const requestItem = await createPartnerApprovalRequest({
+      entityType,
+      actionType,
+      targetId,
+      reason,
+      payload,
+      requestedBy: auth.actorId
+    });
+
+    return res.status(201).json({
+      message: 'Đã gửi request chờ ADMIN duyệt.',
+      ...requestItem
+    });
+  })
+);
+
+router.get(
+  '/approval-requests',
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : undefined;
+    const actionType = typeof req.query.actionType === 'string' ? req.query.actionType : undefined;
+    const items = await listApprovalRequests({ status, entityType, actionType });
+
     return res.status(200).json({
-      message: 'Xóa Tour thành công.',
-      ...result
+      items,
+      total: items.length
+    });
+  })
+);
+
+router.get(
+  '/approval-requests/mine',
+  asyncHandler(async (req, res) => {
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
+
+    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const entityType = typeof req.query.entityType === 'string' ? req.query.entityType : undefined;
+    const actionType = typeof req.query.actionType === 'string' ? req.query.actionType : undefined;
+
+    const items = await listApprovalRequestsByRequester({
+      requestedBy: auth.actorId,
+      status,
+      entityType,
+      actionType
+    });
+
+    return res.status(200).json({
+      items,
+      total: items.length
+    });
+  })
+);
+
+router.get(
+  '/approval-requests/mine/:id',
+  asyncHandler(async (req, res) => {
+    const auth = await assertElevatedAccess(req, ['PARTNER']);
+
+    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!requestId) {
+      throw new ApiError(400, 'Thiếu approval request id.');
+    }
+
+    const item = await getApprovalRequestByIdForRequester({
+      requestId,
+      requestedBy: auth.actorId
+    });
+
+    return res.status(200).json(item);
+  })
+);
+
+router.get(
+  '/approval-requests/:id',
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!requestId) {
+      throw new ApiError(400, 'Thiếu approval request id.');
+    }
+
+    const item = await getApprovalRequestById(requestId);
+    return res.status(200).json(item);
+  })
+);
+
+router.post(
+  '/approval-requests/:id/approve',
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!requestId) {
+      throw new ApiError(400, 'Thiếu approval request id.');
+    }
+
+    const decisionNote = typeof req.body?.decisionNote === 'string' ? req.body.decisionNote : undefined;
+    const item = await approvePartnerRequest({
+      requestId,
+      reviewerId: auth.actorId,
+      decisionNote
+    });
+
+    return res.status(200).json({
+      message: 'Đã duyệt request thành công.',
+      ...item
+    });
+  })
+);
+
+router.post(
+  '/approval-requests/:id/reject',
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    if (!requestId) {
+      throw new ApiError(400, 'Thiếu approval request id.');
+    }
+
+    const decisionNote = typeof req.body?.decisionNote === 'string' ? req.body.decisionNote : undefined;
+    const item = await rejectPartnerRequest({
+      requestId,
+      reviewerId: auth.actorId,
+      decisionNote
+    });
+
+    return res.status(200).json({
+      message: 'Đã từ chối request.',
+      ...item
     });
   })
 );

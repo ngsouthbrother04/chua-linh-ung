@@ -1,17 +1,17 @@
 import { Response, NextFunction } from 'express';
-import prisma from '../lib/prisma'; 
-import bcrypt from 'bcrypt';
-import { AuthRequest } from '../middlewares/authMiddleware'; 
+import prisma from '../lib/prisma';
+import bcrypt from 'bcryptjs';
+import { AuthRequest } from '../middlewares/authMiddleware';
 
 export const userController = {
-    getProfile: async (req: AuthRequest, res: Response) => {
+  getProfile: async (req: AuthRequest, res: Response) => {
     try {
       const userId = req.user?.sub;
       const user = await (prisma as any).user.findUnique({
         where: { id: userId },
         select: { fullName: true, email: true } // Chỉ lấy tên và email
       });
-      
+
       res.status(200).json({ status: "success", data: user });
     } catch (error) {
       res.status(500).json({ message: "Lỗi lấy dữ liệu" });
@@ -19,7 +19,7 @@ export const userController = {
   },
   updateProfile: async (req: AuthRequest, res: Response, next: NextFunction) => {
     try {
-      const userId = req.user?.sub; 
+      const userId = req.user?.sub;
 
       if (!userId) {
         return res.status(401).json({ message: "Không tìm thấy ID trong Token" });
@@ -29,9 +29,9 @@ export const userController = {
 
       const updatedUser = await (prisma as any).user.update({
         where: { id: userId },
-        data: { 
-          fullName: fullName, 
-          email: email 
+        data: {
+          fullName: fullName,
+          email: email
         }
       });
 

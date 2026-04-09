@@ -9,6 +9,7 @@ import swaggerUi from 'swagger-ui-express';
 import authRouter from './routes/api/auth';
 import syncRouter from './routes/api/sync';
 import adminRouter from './routes/api/admin';
+import partnerRouter from './routes/api/partner';
 import poisRouter from './routes/api/pois';
 import toursRouter from './routes/api/tours';
 import userRouter from './routes/api/userRouter';
@@ -70,6 +71,7 @@ app.get('/api-docs/swagger.json', (_req, res) => {
 app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(undefined, { swaggerUrl: '/api-docs/swagger.json' }));
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/sync', syncRouter);
+app.use('/api/v1/partner', partnerRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/pois', poisRouter);
 app.use('/api/v1/tours', toursRouter);

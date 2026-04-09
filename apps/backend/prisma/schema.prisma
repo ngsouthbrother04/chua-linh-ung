@@ -53,6 +53,23 @@ enum SyncAction {
   UNPUBLISH
 }
 
+enum ApprovalEntityType {
+  POI
+  TOUR
+}
+
+enum ApprovalActionType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum UserRole {
   USER
   PARTNER
@@ -68,6 +85,8 @@ model PointOfInterest {
   longitude       Decimal          @db.Decimal(9, 6)
   type            PoiType
   image           String?
+  radius          Int              @default(50)
+  creatorId       String?          @map("creator_id")
   isPublished     Boolean          @default(false) @map("is_published")
   publishedAt     DateTime?        @map("published_at")
   deletedAt       DateTime?        @map("deleted_at")
@@ -75,6 +94,7 @@ model PointOfInterest {
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
   analyticsEvents AnalyticsEvent[]
+  creator         User?            @relation(fields: [creatorId], references: [id], onDelete: SetNull)
 
   @@index([type], map: "idx_points_of_interest_type")
   @@index([contentVersion], map: "idx_points_of_interest_content_version")
@@ -91,9 +111,11 @@ model Tour {
   isPublished    Boolean   @default(false) @map("is_published")
   publishedAt    DateTime? @map("published_at")
   deletedAt      DateTime? @map("deleted_at")
+  creatorId      String?   @map("creator_id")
   contentVersion Int       @default(1) @map("content_version")
   createdAt      DateTime  @default(now()) @map("created_at")
   updatedAt      DateTime  @updatedAt @map("updated_at")
+  creator        User?     @relation(fields: [creatorId], references: [id], onDelete: SetNull)
 
   @@index([contentVersion], map: "idx_tours_content_version")
   @@map("tours")
@@ -208,6 +230,8 @@ model User {
   claimCode           ClaimCode?           @relation(fields: [claimCodeId], references: [id], onDelete: SetNull)
   paymentTransactions PaymentTransaction[]
   authSessions        AuthSession[]
+  pois                PointOfInterest[]
+  tours               Tour[]
 
   @@index([claimCodeId], map: "idx_users_claim_code_id")
   @@index([isActive], map: "idx_users_is_active")
@@ -273,4 +297,27 @@ model AnalyticsPresence {
 
   @@index([lastHeartbeatAt], map: "idx_analytics_presence_last_heartbeat_at")
   @@map("analytics_presence")
+}
+
+model PartnerApprovalRequest {
+  id             String             @id
+  entityType     ApprovalEntityType @map("entity_type")
+  actionType     ApprovalActionType @map("action_type")
+  targetId       String?            @map("target_id")
+  payload        Json               @default("{}")
+  status         ApprovalStatus     @default(PENDING)
+  reason         String?
+  decisionNote   String?            @map("decision_note")
+  requestedBy    String             @map("requested_by")
+  reviewedBy     String?            @map("reviewed_by")
+  resultSnapshot Json?              @map("result_snapshot")
+  reviewedAt     DateTime?          @map("reviewed_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+
+  @@index([status, createdAt], map: "idx_partner_approval_requests_status_created_at")
+  @@index([entityType, actionType], map: "idx_partner_approval_requests_entity_action")
+  @@index([requestedBy], map: "idx_partner_approval_requests_requested_by")
+  @@index([reviewedBy], map: "idx_partner_approval_requests_reviewed_by")
+  @@map("partner_approval_requests")
 }

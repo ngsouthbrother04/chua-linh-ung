@@ -19,6 +19,8 @@ function requiresBearer(apiPath) {
   if (apiPath.startsWith('/api/v1/pois')) return true;
   if (apiPath.startsWith('/api/v1/tours')) return true;
   if (apiPath.startsWith('/api/v1/analytics')) return true;
+  if (apiPath.startsWith('/api/v1/partner')) return true;
+  if (apiPath.startsWith('/api/v1/users')) return true;
 
   if (apiPath.startsWith('/api/v1/auth')) {
     return [
@@ -213,44 +215,6 @@ function buildOverrides() {
       responses: { '202': { description: 'Accepted' } },
       responseSchemas: { '202': '#/components/schemas/AdminAudioGenerateResponse' }
     },
-    'POST /api/v1/admin/pois/:id/image/upload': {
-      summary: 'Upload POI image',
-      description: 'Upload image file for a POI.',
-      requestBody: {
-        required: true,
-        content: {
-          'multipart/form-data': {
-            schema: {
-              type: 'object',
-              required: ['image'],
-              properties: {
-                image: { type: 'string', format: 'binary' }
-              }
-            }
-          }
-        }
-      },
-      responseSchemas: { '200': '#/components/schemas/AdminPoiImageUploadResponse' }
-    },
-    'POST /api/v1/admin/tours/:id/image/upload': {
-      summary: 'Upload tour image',
-      description: 'Upload image file for a tour.',
-      requestBody: {
-        required: true,
-        content: {
-          'multipart/form-data': {
-            schema: {
-              type: 'object',
-              required: ['image'],
-              properties: {
-                image: { type: 'string', format: 'binary' }
-              }
-            }
-          }
-        }
-      },
-      responseSchemas: { '200': '#/components/schemas/AdminTourImageUploadResponse' }
-    },
     'POST /api/v1/admin/pois': {
       summary: 'Create POI',
       description: 'Create POI record from CMS payload.',
@@ -384,6 +348,256 @@ function buildOverrides() {
         }
       },
       responseSchemas: { '200': '#/components/schemas/AdminUserRoleMutationResponse' }
+    },
+    'POST /api/v1/admin/approval-requests': {
+      summary: 'Create approval request',
+      description: 'PARTNER submits a POI/TOUR create-update-delete request for ADMIN review.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['entityType', 'actionType'],
+              properties: {
+                entityType: { type: 'string', enum: ['POI', 'TOUR'] },
+                actionType: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] },
+                targetId: { type: 'string' },
+                payload: { type: 'object' },
+                reason: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'GET /api/v1/admin/approval-requests': {
+      summary: 'List approval requests (admin)',
+      description: 'ADMIN lists approval requests and filters by status/entity/action.',
+      parameters: [
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+        { name: 'entityType', in: 'query', schema: { type: 'string', enum: ['POI', 'TOUR'] } },
+        { name: 'actionType', in: 'query', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] } }
+      ],
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestListResponse' }
+    },
+    'GET /api/v1/admin/approval-requests/:id': {
+      summary: 'Get approval request detail (admin)',
+      description: 'ADMIN gets detail of an approval request.',
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestRecord' }
+    },
+    'GET /api/v1/admin/approval-requests/mine': {
+      summary: 'List my approval requests (partner)',
+      description: 'PARTNER lists only approval requests created by the current account.',
+      parameters: [
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+        { name: 'entityType', in: 'query', schema: { type: 'string', enum: ['POI', 'TOUR'] } },
+        { name: 'actionType', in: 'query', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] } }
+      ],
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestListResponse' }
+    },
+    'GET /api/v1/admin/approval-requests/mine/:id': {
+      summary: 'Get my approval request detail (partner)',
+      description: 'PARTNER gets detail of an approval request owned by the current account.',
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestRecord' }
+    },
+    'POST /api/v1/admin/approval-requests/:id/approve': {
+      summary: 'Approve approval request',
+      description: 'ADMIN approves a pending request and applies its domain changes atomically.',
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                decisionNote: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'POST /api/v1/admin/approval-requests/:id/reject': {
+      summary: 'Reject approval request',
+      description: 'ADMIN rejects a pending request.',
+      requestBody: {
+        required: false,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                decisionNote: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+
+    'POST /api/v1/partner/pois': {
+      summary: 'Submit POI create request',
+      description: 'PARTNER submits a POI create payload for ADMIN review.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' }
+          }
+        }
+      },
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'PUT /api/v1/partner/pois/:id': {
+      summary: 'Submit POI update request',
+      description: 'PARTNER submits a POI update payload for ADMIN review.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' }
+          }
+        }
+      },
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'DELETE /api/v1/partner/pois/:id': {
+      summary: 'Submit POI delete request',
+      description: 'PARTNER submits a POI delete request for ADMIN review.',
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'POST /api/v1/partner/tours': {
+      summary: 'Submit Tour create request',
+      description: 'PARTNER submits a Tour create payload for ADMIN review.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' }
+          }
+        }
+      },
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'PUT /api/v1/partner/tours/:id': {
+      summary: 'Submit Tour update request',
+      description: 'PARTNER submits a Tour update payload for ADMIN review.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: { type: 'object' }
+          }
+        }
+      },
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'DELETE /api/v1/partner/tours/:id': {
+      summary: 'Submit Tour delete request',
+      description: 'PARTNER submits a Tour delete request for ADMIN review.',
+      responseSchemas: { '201': '#/components/schemas/AdminApprovalRequestMutationResponse' }
+    },
+    'POST /api/v1/partner/pois/:id/image/upload': {
+      summary: 'Upload POI image',
+      description: 'Upload image file for a POI in the partner namespace.',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              required: ['image'],
+              properties: {
+                image: { type: 'string', format: 'binary' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminPoiImageUploadResponse' }
+    },
+    'POST /api/v1/partner/tours/:id/image/upload': {
+      summary: 'Upload tour image',
+      description: 'Upload image file for a tour in the partner namespace.',
+      requestBody: {
+        required: true,
+        content: {
+          'multipart/form-data': {
+            schema: {
+              type: 'object',
+              required: ['image'],
+              properties: {
+                image: { type: 'string', format: 'binary' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/AdminTourImageUploadResponse' }
+    },
+    'GET /api/v1/partner/approval-requests/mine': {
+      summary: 'List my approval requests (partner)',
+      description: 'PARTNER lists only approval requests created by the current account.',
+      parameters: [
+        { name: 'status', in: 'query', schema: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] } },
+        { name: 'entityType', in: 'query', schema: { type: 'string', enum: ['POI', 'TOUR'] } },
+        { name: 'actionType', in: 'query', schema: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] } }
+      ],
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestListResponse' }
+    },
+    'GET /api/v1/partner/approval-requests/mine/:id': {
+      summary: 'Get my approval request detail (partner)',
+      description: 'PARTNER gets detail of an approval request owned by the current account.',
+      responseSchemas: { '200': '#/components/schemas/AdminApprovalRequestRecord' }
+    },
+
+    'GET /api/v1/users/profile': {
+      summary: 'Get user profile',
+      description: 'Get current authenticated user profile.',
+      responseSchemas: { '200': '#/components/schemas/UserProfileResponse' }
+    },
+    'PATCH /api/v1/users/profile': {
+      summary: 'Update user profile',
+      description: 'Update current user profile fields.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                fullName: { type: 'string' },
+                email: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/UserProfileResponse' }
+    },
+    'POST /api/v1/users/change-password': {
+      summary: 'Change user password',
+      description: 'Change current user password by verifying old password first.',
+      requestBody: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              required: ['oldPassword', 'newPassword'],
+              properties: {
+                oldPassword: { type: 'string' },
+                newPassword: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      responseSchemas: { '200': '#/components/schemas/UserPasswordMutationResponse' }
     },
 
     'GET /api/v1/pois': {
@@ -936,6 +1150,67 @@ function main() {
       previousRole: { type: 'string', enum: ['USER', 'PARTNER', 'ADMIN'] },
       reason: { type: 'string', nullable: true },
       reauthRequired: { type: 'boolean' }
+    }
+  };
+
+  doc.components.schemas.AdminApprovalRequestRecord = {
+    type: 'object',
+    properties: {
+      id: { type: 'string' },
+      entityType: { type: 'string', enum: ['POI', 'TOUR'] },
+      actionType: { type: 'string', enum: ['CREATE', 'UPDATE', 'DELETE'] },
+      targetId: { type: 'string', nullable: true },
+      payload: { type: 'object' },
+      status: { type: 'string', enum: ['PENDING', 'APPROVED', 'REJECTED'] },
+      reason: { type: 'string', nullable: true },
+      decisionNote: { type: 'string', nullable: true },
+      requestedBy: { type: 'string' },
+      reviewedBy: { type: 'string', nullable: true },
+      resultSnapshot: { type: 'object', nullable: true },
+      reviewedAt: { type: 'string', format: 'date-time', nullable: true },
+      createdAt: { type: 'string', format: 'date-time' },
+      updatedAt: { type: 'string', format: 'date-time' }
+    }
+  };
+
+  doc.components.schemas.AdminApprovalRequestListResponse = {
+    type: 'object',
+    properties: {
+      items: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/AdminApprovalRequestRecord' }
+      },
+      total: { type: 'integer' }
+    }
+  };
+
+  doc.components.schemas.AdminApprovalRequestMutationResponse = {
+    type: 'object',
+    allOf: [
+      { type: 'object', properties: { message: { type: 'string' } } },
+      { $ref: '#/components/schemas/AdminApprovalRequestRecord' }
+    ]
+  };
+
+  doc.components.schemas.UserProfileResponse = {
+    type: 'object',
+    properties: {
+      status: { type: 'string' },
+      data: {
+        type: 'object',
+        properties: {
+          fullName: { type: 'string', nullable: true },
+          email: { type: 'string' }
+        }
+      }
+    }
+  };
+
+  doc.components.schemas.UserPasswordMutationResponse = {
+    type: 'object',
+    properties: {
+      status: { type: 'string' },
+      message: { type: 'string' }
     }
   };
 
