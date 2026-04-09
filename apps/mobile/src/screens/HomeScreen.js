@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { 
   View, Text, StyleSheet, Dimensions, TextInput, 
-  ScrollView, TouchableOpacity, FlatList, ActivityIndicator, Modal, Alert, StatusBar 
+  ScrollView, TouchableOpacity, FlatList, ActivityIndicator, Modal, Alert, StatusBar, TouchableWithoutFeedback 
 } from "react-native";
 import MapView, { Marker, PROVIDER_GOOGLE, Circle } from "react-native-maps";
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -407,27 +407,33 @@ const checkGeofencing = async () => {
         </View>
       </Modal>
 
-      {/* LANGUAGE MODAL */}
+{/* LANGUAGE MODAL */}
       <Modal visible={isLangModalVisible} animationType="fade" transparent>
-        <View style={styles.modalBg}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>{uiLabels.langTitle}</Text>
-            <FlatList
-              data={LANGUAGES}
-              numColumns={2}
-              keyExtractor={(i) => i.code}
-              renderItem={({ item }) => (
-                <TouchableOpacity 
-                  style={[styles.langGridItem, lang.code === item.code && styles.langGridItemActive]} 
-                  onPress={() => { setLang(item); setIsLangModalVisible(false); Speech.stop(); }}
-                >
-                  <Text style={{fontSize: 30}}>{item.flag}</Text>
-                  <Text style={styles.langNameText}>{item.name}</Text>
-                </TouchableOpacity>
-              )}
-            />
-          </View>
-        </View>
+        <TouchableOpacity 
+          style={styles.modalBg} 
+          activeOpacity={1} 
+          onPress={() => setIsLangModalVisible(false)}
+        >
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>{uiLabels.langTitle}</Text>
+              <FlatList
+                data={LANGUAGES}
+                numColumns={2}
+                keyExtractor={(i) => i.code}
+                renderItem={({ item }) => (
+                  <TouchableOpacity 
+                    style={[styles.langGridItem, lang.code === item.code && styles.langGridItemActive]} 
+                    onPress={() => { setLang(item); setIsLangModalVisible(false); Speech.stop(); }}
+                  >
+                    <Text style={{fontSize: 30}}>{item.flag}</Text>
+                    <Text style={styles.langNameText}>{item.name}</Text>
+                  </TouchableOpacity>
+                )}
+              />
+            </View>
+          </TouchableWithoutFeedback>
+        </TouchableOpacity>
       </Modal>
     </View>
   );

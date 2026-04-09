@@ -45,7 +45,7 @@ export default function AppNavigator() {
             title: "🏠 Trang chủ",
             headerStyle: {
               backgroundColor: "#fff",
-              height: 80, 
+              height: 50, 
             },
           }} 
         />
