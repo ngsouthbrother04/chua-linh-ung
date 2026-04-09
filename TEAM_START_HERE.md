@@ -74,6 +74,75 @@ npm run db:setup
 2. `prisma generate`
 3. `prisma seed`
 
+## 5.1) Cài Piper TTS trên Windows cho API generate TTS (triệt để rủi ro)
+
+Kết luận cho teammate Windows:
+
+- Dễ nhất và ổn định nhất cho onboarding: cài bằng `pip`.
+- Không dùng `cmake` cho luồng cài nhanh của team (cmake chỉ dành cho trường hợp cần build từ source).
+
+Để loại bỏ triệt để lỗi PATH và lỗi link model, repo đã có script tự động:
+
+- `apps/backend/scripts/setup-piper-windows.ps1`
+
+Script này sẽ làm toàn bộ:
+
+1. Cài `piper-tts` bằng pip.
+2. Tự dò `piper.exe` thực tế trên máy.
+3. Tải model `vi.onnx` với URL dự phòng.
+4. Chạy smoke test sinh file WAV để xác nhận model dùng được.
+5. Tự cập nhật `apps/backend/.env` với `PIPER_BIN`, `PIPER_MODEL_DIR`, `PIPER_MODEL_MAP`.
+
+### Bước A - Kiểm tra Python launcher
+
+Mở PowerShell:
+
+```powershell
+py --version
+py -m pip --version
+```
+
+Nếu chưa có, cài Python 3.11 hoặc 3.12 từ python.org, nhớ bật `Add python.exe to PATH`.
+
+### Bước B - Chạy script cài đặt tự động (khuyến nghị)
+
+Chạy tại root project:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\apps\backend\scripts\setup-piper-windows.ps1
+```
+
+Khi thành công, script in ra:
+
+- đường dẫn `piper.exe` đã resolve
+- file model đã tải
+- xác nhận cập nhật `.env`
+
+### Bước C - Verify backend config
+
+Trong `apps/backend`:
+
+```bash
+npm run tts:validate
+```
+
+Kết quả mong đợi: cấu hình TTS hợp lệ (không có lỗi invalid config).
+
+### Bước D - Verify API generate TTS
+
+1. Chạy backend:
+
+```bash
+npm run dev:backend
+```
+
+2. Dùng API admin tạo/cập nhật nội dung POI có text để trigger hàng đợi TTS.
+3. Kiểm tra audio được tạo trong thư mục local provider:
+
+- `apps/backend/public/audio`
+
+Nếu có file audio mới được sinh ra, pipeline Piper TTS đã hoạt động.
+
 ## Sơ đồ DB (Mermaid)
 
 Sơ đồ dưới đây mô tả các bảng chính và quan hệ quan trọng để team FE nắm được luồng dữ liệu nhanh.
