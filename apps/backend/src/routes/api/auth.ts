@@ -1,6 +1,6 @@
-import { Router } from 'express';
-import crypto from 'crypto';
-import { PaymentProvider } from '../../generated/prisma/client';
+import { Router } from "express";
+import crypto from "crypto";
+import { PaymentProvider } from "../../generated/prisma/client";
 import {
   registerUser,
   loginUser,
@@ -9,15 +9,25 @@ import {
   finalizePayment,
   initiatePayment,
   refreshAuthSession,
-  revokeAuthSessionByAccessToken
-} from '../../services/authService';
-import { verifyVNPaySignature, verifyMoMoSignature } from '../../utils/paymentVerifier';
-import { requireAuth, requireRole, AuthRequest } from '../../middlewares/authMiddleware';
-import asyncHandler from '../../utils/asyncHandler';
-import ApiError from '../../utils/ApiError';
+  revokeAuthSessionByAccessToken,
+} from "../../services/authService";
+import {
+  verifyVNPaySignature,
+  verifyMoMoSignature,
+} from "../../utils/paymentVerifier";
+import {
+  requireAuth,
+  requireRole,
+  AuthRequest,
+} from "../../middlewares/authMiddleware";
+import asyncHandler from "../../utils/asyncHandler";
+import ApiError from "../../utils/ApiError";
+import { synthesizePreviewAudioFromText } from "../../services/ttsService";
 
 const router = Router();
-const CALLBACK_TTL_SECONDS = Number(process.env.PAYMENT_CALLBACK_MAX_AGE_SECONDS ?? 300);
+const CALLBACK_TTL_SECONDS = Number(
+  process.env.PAYMENT_CALLBACK_MAX_AGE_SECONDS ?? 300,
+);
 
 /**
  * POST /api/v1/auth/register
@@ -35,11 +45,11 @@ const CALLBACK_TTL_SECONDS = Number(process.env.PAYMENT_CALLBACK_MAX_AGE_SECONDS
  */
 
 function extractBearerToken(headerValue: unknown): string {
-  if (typeof headerValue !== 'string' || !headerValue.startsWith('Bearer ')) {
-    return '';
+  if (typeof headerValue !== "string" || !headerValue.startsWith("Bearer ")) {
+    return "";
   }
 
-  return headerValue.slice('Bearer '.length).trim();
+  return headerValue.slice("Bearer ".length).trim();
 }
 
 function verifyCallbackSignature(params: {
@@ -49,13 +59,21 @@ function verifyCallbackSignature(params: {
   timestamp: string;
   signature: string;
 }): boolean {
-  const secret = process.env.PAYMENT_CALLBACK_SECRET ?? '';
+  const secret = process.env.PAYMENT_CALLBACK_SECRET ?? "";
   if (!secret) {
     return false;
   }
 
-  const payload = [params.transactionId, params.status, params.deviceId ?? '', params.timestamp].join('|');
-  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex');
+  const payload = [
+    params.transactionId,
+    params.status,
+    params.deviceId ?? "",
+    params.timestamp,
+  ].join("|");
+  const expected = crypto
+    .createHmac("sha256", secret)
+    .update(payload)
+    .digest("hex");
   const provided = params.signature.toLowerCase();
 
   if (provided.length !== expected.length) {
@@ -66,18 +84,23 @@ function verifyCallbackSignature(params: {
 }
 
 router.post(
-  '/register',
+  "/register",
   asyncHandler(async (req, res) => {
     const { email, password, fullName, deviceId } = req.body;
     if (!email || !password) {
-      throw new ApiError(400, 'Thiếu email hoặc password.');
+      throw new ApiError(400, "Thiếu email hoặc password.");
     }
-    const authData = await registerUser({ email, password, fullName, deviceId });
-    return res.status(201).json({
-      message: 'Đăng ký thành công.',
-      ...authData
+    const authData = await registerUser({
+      email,
+      password,
+      fullName,
+      deviceId,
     });
-  })
+    return res.status(201).json({
+      message: "Đăng ký thành công.",
+      ...authData,
+    });
+  }),
 );
 
 /**
@@ -96,18 +119,18 @@ router.post(
  */
 
 router.post(
-  '/login',
+  "/login",
   asyncHandler(async (req, res) => {
     const { email, password, deviceId } = req.body;
     if (!email || !password) {
-      throw new ApiError(400, 'Thiếu email hoặc password.');
+      throw new ApiError(400, "Thiếu email hoặc password.");
     }
     const authData = await loginUser({ email, password, deviceId });
     return res.status(200).json({
-      message: 'Đăng nhập thành công.',
-      ...authData
+      message: "Đăng nhập thành công.",
+      ...authData,
     });
-  })
+  }),
 );
 
 /**
@@ -124,49 +147,53 @@ router.post(
  * @return {object} 401 - Unauthorized
  */
 router.post(
-  '/change-password',
+  "/change-password",
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
     const userId = req.user?.sub;
-    const currentPassword = typeof req.body?.currentPassword === 'string' ? req.body.currentPassword : '';
-    const newPassword = typeof req.body?.newPassword === 'string' ? req.body.newPassword : '';
+    const currentPassword =
+      typeof req.body?.currentPassword === "string"
+        ? req.body.currentPassword
+        : "";
+    const newPassword =
+      typeof req.body?.newPassword === "string" ? req.body.newPassword : "";
 
     if (!userId) {
-      throw new ApiError(401, 'Unauthorized');
+      throw new ApiError(401, "Unauthorized");
     }
 
     if (!currentPassword || !newPassword) {
-      throw new ApiError(400, 'Thiếu currentPassword hoặc newPassword.');
+      throw new ApiError(400, "Thiếu currentPassword hoặc newPassword.");
     }
 
     try {
       await changeUserPassword({
         userId,
         currentPassword,
-        newPassword
+        newPassword,
       });
     } catch (error) {
-      const code = error instanceof Error ? error.message : 'UNKNOWN';
+      const code = error instanceof Error ? error.message : "UNKNOWN";
 
-      if (code === 'INVALID_CURRENT_PASSWORD') {
-        throw new ApiError(400, 'Mật khẩu hiện tại không đúng.');
+      if (code === "INVALID_CURRENT_PASSWORD") {
+        throw new ApiError(400, "Mật khẩu hiện tại không đúng.");
       }
 
-      if (code === 'PASSWORD_TOO_SHORT') {
-        throw new ApiError(400, 'Mật khẩu mới phải có ít nhất 6 ký tự.');
+      if (code === "PASSWORD_TOO_SHORT") {
+        throw new ApiError(400, "Mật khẩu mới phải có ít nhất 6 ký tự.");
       }
 
-      if (code === 'INVALID_PASSWORD_PAYLOAD') {
-        throw new ApiError(400, 'Dữ liệu đổi mật khẩu không hợp lệ.');
+      if (code === "INVALID_PASSWORD_PAYLOAD") {
+        throw new ApiError(400, "Dữ liệu đổi mật khẩu không hợp lệ.");
       }
 
       throw error;
     }
 
     return res.status(200).json({
-      message: 'Đổi mật khẩu thành công. Vui lòng đăng nhập lại.'
+      message: "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.",
     });
-  })
+  }),
 );
 
 /**
@@ -185,21 +212,21 @@ router.post(
  */
 
 router.post(
-  '/payment/claim',
+  "/payment/claim",
   requireAuth,
-  requireRole(['USER']),
+  requireRole(["USER"]),
   asyncHandler(async (req: AuthRequest, res) => {
-    const claimCodeRaw = req.body?.code || req.body?.claimCode || '';
+    const claimCodeRaw = req.body?.code || req.body?.claimCode || "";
     if (!claimCodeRaw) {
-      throw new ApiError(400, 'Thiếu code.');
+      throw new ApiError(400, "Thiếu code.");
     }
     const userId = req.user?.sub;
     if (!userId) {
-      throw new ApiError(401, 'Unauthorized');
+      throw new ApiError(401, "Unauthorized");
     }
     const result = await redeemClaimCode(userId, claimCodeRaw);
     return res.status(200).json(result);
-  })
+  }),
 );
 
 /**
@@ -215,24 +242,91 @@ router.post(
  */
 
 router.post(
-  '/token-refresh',
+  "/tts-preview",
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const text = typeof req.body?.text === "string" ? req.body.text : "";
+    const language =
+      typeof req.body?.language === "string" ? req.body.language : "vi";
+
+    if (!text.trim()) {
+      throw new ApiError(400, "Thiếu mô tả để tạo audio test.");
+    }
+
+    try {
+      const { audioBuffer, language: normalizedLanguage } =
+        await synthesizePreviewAudioFromText(text, language);
+
+      res.setHeader("Content-Type", "audio/wav");
+      res.setHeader("Content-Length", String(audioBuffer.length));
+      res.setHeader(
+        "Content-Disposition",
+        `inline; filename="tts-preview-${normalizedLanguage}.wav"`,
+      );
+
+      return res.status(200).send(audioBuffer);
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "TTS_GENERATION_FAILED";
+
+      if (message === "TTS_TEXT_TOO_LONG") {
+        throw new ApiError(400, "Mô tả quá dài (tối đa 2000 ký tự).");
+      }
+
+      if (message === "TTS_LANGUAGE_NOT_SUPPORTED") {
+        throw new ApiError(400, "Ngôn ngữ TTS chưa được hỗ trợ.");
+      }
+
+      if (message === "PIPER_MODEL_NOT_CONFIGURED") {
+        throw new ApiError(500, "TTS chưa được cấu hình model giọng đọc.");
+      }
+
+      if (message === "PIPER_MODEL_FILE_NOT_FOUND") {
+        throw new ApiError(
+          500,
+          "Không tìm thấy file model Piper cho ngôn ngữ đã chọn.",
+        );
+      }
+
+      if (message === "PIPER_BIN_NOT_FOUND") {
+        throw new ApiError(
+          500,
+          "Không tìm thấy chương trình piper. Hãy cài Piper hoặc cấu hình PIPER_BIN đúng đường dẫn.",
+        );
+      }
+
+      if (
+        message.startsWith("PIPER_PROCESS_EXIT_") ||
+        message.startsWith("PIPER_EXECUTION_FAILED")
+      ) {
+        throw new ApiError(500, "TTS runtime lỗi khi sinh audio.");
+      }
+
+      throw new ApiError(500, "Không thể tạo audio test từ mô tả.");
+    }
+  }),
+);
+
+router.post(
+  "/token-refresh",
   asyncHandler(async (req, res) => {
-    const refreshTokenRaw = typeof req.body?.refreshToken === 'string' ? req.body.refreshToken : '';
+    const refreshTokenRaw =
+      typeof req.body?.refreshToken === "string" ? req.body.refreshToken : "";
 
     if (!refreshTokenRaw) {
-      throw new ApiError(401, 'Refresh token khong hop le hoac da het han.');
+      throw new ApiError(401, "Refresh token khong hop le hoac da het han.");
     }
 
     try {
       const refreshed = await refreshAuthSession(refreshTokenRaw);
       return res.status(200).json({
-        message: 'Làm mới phiên đăng nhập thành công.',
-        ...refreshed
+        message: "Làm mới phiên đăng nhập thành công.",
+        ...refreshed,
       });
     } catch {
-      throw new ApiError(401, 'Refresh token khong hop le hoac da het han.');
+      throw new ApiError(401, "Refresh token khong hop le hoac da het han.");
     }
-  })
+  }),
 );
 
 /**
@@ -255,35 +349,38 @@ router.post(
  */
 
 router.post(
-  '/payment/initiate',
+  "/payment/initiate",
   requireAuth,
-  requireRole(['USER']),
+  requireRole(["USER"]),
   asyncHandler(async (req: AuthRequest, res) => {
     const providerRaw =
-      typeof req.body?.paymentMethod === 'string'
+      typeof req.body?.paymentMethod === "string"
         ? req.body.paymentMethod.toLowerCase()
-        : typeof req.body?.provider === 'string'
+        : typeof req.body?.provider === "string"
           ? req.body.provider.toLowerCase()
-          : '';
+          : "";
     const amount = Number(req.body?.amount);
-    const currency = typeof req.body?.currency === 'string' ? req.body.currency : 'VND';
-    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : undefined;
-    const returnUrl = typeof req.body?.returnUrl === 'string' ? req.body.returnUrl : undefined;
+    const currency =
+      typeof req.body?.currency === "string" ? req.body.currency : "VND";
+    const deviceId =
+      typeof req.body?.deviceId === "string" ? req.body.deviceId : undefined;
+    const returnUrl =
+      typeof req.body?.returnUrl === "string" ? req.body.returnUrl : undefined;
 
     const provider =
-      providerRaw === 'vnpay'
+      providerRaw === "vnpay"
         ? PaymentProvider.VNPAY
-        : providerRaw === 'momo'
+        : providerRaw === "momo"
           ? PaymentProvider.MOMO
           : undefined;
 
     if (!provider) {
-      throw new ApiError(400, 'provider phải là vnpay hoặc momo.');
+      throw new ApiError(400, "provider phải là vnpay hoặc momo.");
     }
 
     const userId = req.user?.sub;
     if (!userId) {
-      throw new ApiError(401, 'Unauthorized');
+      throw new ApiError(401, "Unauthorized");
     }
 
     const payment = await initiatePayment({
@@ -292,14 +389,14 @@ router.post(
       currency,
       deviceId,
       returnUrl,
-      userId
+      userId,
     });
 
     return res.status(200).json({
-      message: 'Khởi tạo thanh toán thành công.',
-      ...payment
+      message: "Khởi tạo thanh toán thành công.",
+      ...payment,
     });
-  })
+  }),
 );
 
 /**
@@ -316,23 +413,28 @@ router.post(
  */
 
 router.post(
-  '/logout',
+  "/logout",
   asyncHandler(async (req, res) => {
-    const accessToken = extractBearerToken(req.headers.authorization) || (typeof req.body?.token === 'string' ? req.body.token : '');
+    const accessToken =
+      extractBearerToken(req.headers.authorization) ||
+      (typeof req.body?.token === "string" ? req.body.token : "");
 
     if (!accessToken) {
-      throw new ApiError(401, 'Thiếu hoặc sai định dạng Authorization Bearer token.');
+      throw new ApiError(
+        401,
+        "Thiếu hoặc sai định dạng Authorization Bearer token.",
+      );
     }
 
     try {
       await revokeAuthSessionByAccessToken(accessToken);
       return res.status(200).json({
-        message: 'Dang xuat thanh cong'
+        message: "Dang xuat thanh cong",
       });
     } catch {
-      throw new ApiError(401, 'Token khong hop le hoac da het han.');
+      throw new ApiError(401, "Token khong hop le hoac da het han.");
     }
-  })
+  }),
 );
 
 /**
@@ -357,66 +459,95 @@ router.post(
  */
 
 router.post(
-  '/payment/callback',
+  "/payment/callback",
   asyncHandler(async (req, res) => {
     const transactionIdRaw =
-      typeof req.body?.orderId === 'string'
+      typeof req.body?.orderId === "string"
         ? req.body.orderId
-        : typeof req.body?.transactionId === 'string'
+        : typeof req.body?.transactionId === "string"
           ? req.body.transactionId
-          : '';
-    const statusRaw = typeof req.body?.status === 'string' ? req.body.status.toLowerCase() : '';
-    const deviceId = typeof req.body?.deviceId === 'string' ? req.body.deviceId : undefined;
-    const idempotencyKeyHeader = req.headers['x-idempotency-key'];
-    const signatureHeader = req.headers['x-callback-signature'];
-    const timestampHeader = req.headers['x-callback-timestamp'];
+          : "";
+    const statusRaw =
+      typeof req.body?.status === "string" ? req.body.status.toLowerCase() : "";
+    const deviceId =
+      typeof req.body?.deviceId === "string" ? req.body.deviceId : undefined;
+    const idempotencyKeyHeader = req.headers["x-idempotency-key"];
+    const signatureHeader = req.headers["x-callback-signature"];
+    const timestampHeader = req.headers["x-callback-timestamp"];
 
-    const idempotencyKey = typeof idempotencyKeyHeader === 'string' ? idempotencyKeyHeader : '';
-    const signature = typeof signatureHeader === 'string' ? signatureHeader : '';
-    const timestamp = typeof timestampHeader === 'string' ? timestampHeader : '';
+    const idempotencyKey =
+      typeof idempotencyKeyHeader === "string" ? idempotencyKeyHeader : "";
+    const signature =
+      typeof signatureHeader === "string" ? signatureHeader : "";
+    const timestamp =
+      typeof timestampHeader === "string" ? timestampHeader : "";
 
-    const providerRaw = typeof req.body?.provider === 'string' ? req.body.provider.toLowerCase() : '';
-    const gatewayPayload = typeof req.body?.gatewayPayload === 'object' && req.body.gatewayPayload !== null ? req.body.gatewayPayload : undefined;
+    const providerRaw =
+      typeof req.body?.provider === "string"
+        ? req.body.provider.toLowerCase()
+        : "";
+    const gatewayPayload =
+      typeof req.body?.gatewayPayload === "object" &&
+      req.body.gatewayPayload !== null
+        ? req.body.gatewayPayload
+        : undefined;
 
     const status =
-      statusRaw === 'success' || statusRaw === 'succeeded'
-        ? 'success'
-        : statusRaw === 'failed' || statusRaw === 'fail'
-          ? 'failed'
-          : statusRaw === 'cancelled' || statusRaw === 'canceled'
-            ? 'cancelled'
+      statusRaw === "success" || statusRaw === "succeeded"
+        ? "success"
+        : statusRaw === "failed" || statusRaw === "fail"
+          ? "failed"
+          : statusRaw === "cancelled" || statusRaw === "canceled"
+            ? "cancelled"
             : undefined;
 
     if (!transactionIdRaw || !status) {
-      throw new ApiError(400, 'Thiếu transactionId/orderId hoặc status không hợp lệ.');
+      throw new ApiError(
+        400,
+        "Thiếu transactionId/orderId hoặc status không hợp lệ.",
+      );
     }
 
     if (!idempotencyKey) {
-      throw new ApiError(400, 'Thiếu x-idempotency-key.');
+      throw new ApiError(400, "Thiếu x-idempotency-key.");
     }
 
     let validSignature = false;
     let signatureHashToSave = signature;
 
-    if (providerRaw === 'vnpay' && gatewayPayload) {
-      validSignature = verifyVNPaySignature(gatewayPayload as Record<string, string>);
-      signatureHashToSave = (gatewayPayload as Record<string, string>)['vnp_SecureHash'] || 'vnpay-validated';
-    } else if (providerRaw === 'momo' && gatewayPayload) {
-      validSignature = verifyMoMoSignature(gatewayPayload as Record<string, string>);
-      signatureHashToSave = (gatewayPayload as Record<string, string>)['signature'] || 'momo-validated';
+    if (providerRaw === "vnpay" && gatewayPayload) {
+      validSignature = verifyVNPaySignature(
+        gatewayPayload as Record<string, string>,
+      );
+      signatureHashToSave =
+        (gatewayPayload as Record<string, string>)["vnp_SecureHash"] ||
+        "vnpay-validated";
+    } else if (providerRaw === "momo" && gatewayPayload) {
+      validSignature = verifyMoMoSignature(
+        gatewayPayload as Record<string, string>,
+      );
+      signatureHashToSave =
+        (gatewayPayload as Record<string, string>)["signature"] ||
+        "momo-validated";
     } else {
       if (!signature || !timestamp) {
-        throw new ApiError(400, 'Thiếu xác thực (gatewayPayload hoặc x-callback-signature/timestamp).');
+        throw new ApiError(
+          400,
+          "Thiếu xác thực (gatewayPayload hoặc x-callback-signature/timestamp).",
+        );
       }
 
       const callbackTimestampMs = Number(timestamp);
       if (!Number.isFinite(callbackTimestampMs)) {
-        throw new ApiError(400, 'x-callback-timestamp không hợp lệ.');
+        throw new ApiError(400, "x-callback-timestamp không hợp lệ.");
       }
 
       const nowMs = Date.now();
       if (Math.abs(nowMs - callbackTimestampMs) > CALLBACK_TTL_SECONDS * 1000) {
-        throw new ApiError(401, 'Callback đã quá hạn hoặc lệch thời gian cho phép.');
+        throw new ApiError(
+          401,
+          "Callback đã quá hạn hoặc lệch thời gian cho phép.",
+        );
       }
 
       validSignature = verifyCallbackSignature({
@@ -424,12 +555,15 @@ router.post(
         status,
         deviceId,
         timestamp,
-        signature
+        signature,
       });
     }
 
     if (!validSignature) {
-      throw new ApiError(401, 'Chữ ký callback (gateway hoặc internal) không hợp lệ.');
+      throw new ApiError(
+        401,
+        "Chữ ký callback (gateway hoặc internal) không hợp lệ.",
+      );
     }
 
     const finalized = await finalizePayment({
@@ -437,25 +571,25 @@ router.post(
       status,
       idempotencyKey,
       signatureHash: signatureHashToSave,
-      deviceId
+      deviceId,
     });
 
-    if (finalized.status === 'SUCCEEDED') {
+    if (finalized.status === "SUCCEEDED") {
       return res.status(200).json({
         token: finalized.token,
         expiresIn: finalized.expiresIn,
         deviceId: finalized.deviceId,
         orderId: finalized.orderId,
-        status: finalized.status
+        status: finalized.status,
       });
     }
 
     return res.status(200).json({
       orderId: finalized.orderId,
       status: finalized.status,
-      deviceId: finalized.deviceId
+      deviceId: finalized.deviceId,
     });
-  })
+  }),
 );
 
 export default router;

@@ -1,34 +1,34 @@
-import fs from 'fs/promises';
-import os from 'os';
-import path from 'path';
-import { spawn } from 'node:child_process';
-import { Queue, Worker, type JobsOptions } from 'bullmq';
-import prisma from '../lib/prisma';
+import fs from "fs/promises";
+import os from "os";
+import path from "path";
+import { spawn } from "node:child_process";
+import { Queue, Worker, type JobsOptions } from "bullmq";
+import prisma from "../lib/prisma";
 
-const TTS_QUEUE_NAME = 'tts-generation';
+const TTS_QUEUE_NAME = "tts-generation";
 const DEFAULT_TTS_LANGUAGES = [
-  'vi',
-  'en',
-  'fr',
-  'de',
-  'es',
-  'pt',
-  'ru',
-  'zh',
-  'id',
-  'hi',
-  'ar',
-  'tr'
+  "vi",
+  "en",
+  "fr",
+  "de",
+  "es",
+  "pt",
+  "ru",
+  "zh",
+  "id",
+  "hi",
+  "ar",
+  "tr",
 ] as const;
 
 const DEFAULT_JOB_OPTIONS: JobsOptions = {
   attempts: 3,
   backoff: {
-    type: 'exponential',
-    delay: 2000
+    type: "exponential",
+    delay: 2000,
   },
   removeOnComplete: 100,
-  removeOnFail: 200
+  removeOnFail: 200,
 };
 
 export interface TtsJobPayload {
@@ -43,7 +43,7 @@ export interface EnqueuePoiTtsResult {
   queued: number;
   skipped: number;
   jobIds: string[];
-  mode: 'bullmq' | 'in-memory';
+  mode: "bullmq" | "in-memory";
 }
 
 export interface TtsRuntimeConfigValidation {
@@ -54,23 +54,23 @@ export interface TtsRuntimeConfigValidation {
   warnings: string[];
 }
 
-type QueueMode = 'bullmq' | 'in-memory';
-type StorageProvider = 'local';
+type QueueMode = "bullmq" | "in-memory";
+type StorageProvider = "local";
 
 let ttsQueue: Queue | null = null;
 let ttsWorker: Worker<TtsJobPayload> | null = null;
 const inMemoryInFlightJobs = new Set<string>();
 
 function getQueueMode(): QueueMode {
-  return process.env.REDIS_URL ? 'bullmq' : 'in-memory';
+  return process.env.REDIS_URL ? "bullmq" : "in-memory";
 }
 
 function getStorageProvider(): StorageProvider {
-  return 'local';
+  return "local";
 }
 
 function getPiperBinary(): string {
-  return process.env.PIPER_BIN?.trim() || 'piper';
+  return process.env.PIPER_BIN?.trim() || "piper";
 }
 
 function parsePiperModelMap(): Record<string, string> {
@@ -81,13 +81,15 @@ function parsePiperModelMap(): Record<string, string> {
 
   try {
     const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('PIPER_MODEL_MAP must be a JSON object.');
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+      throw new Error("PIPER_MODEL_MAP must be a JSON object.");
     }
 
     const normalized: Record<string, string> = {};
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value !== 'string') {
+    for (const [key, value] of Object.entries(
+      parsed as Record<string, unknown>,
+    )) {
+      if (typeof value !== "string") {
         continue;
       }
 
@@ -102,13 +104,13 @@ function parsePiperModelMap(): Record<string, string> {
 
     return normalized;
   } catch {
-    throw new Error('PIPER_MODEL_MAP_INVALID_JSON');
+    throw new Error("PIPER_MODEL_MAP_INVALID_JSON");
   }
 }
 
 function resolvePiperModelPath(language: string): string {
   const normalizedLanguage = language.trim().toLowerCase();
-  const languageBase = normalizedLanguage.split('-')[0];
+  const languageBase = normalizedLanguage.split("-")[0];
 
   const modelMap = parsePiperModelMap();
   const fromMap = modelMap[normalizedLanguage] ?? modelMap[languageBase];
@@ -121,7 +123,7 @@ function resolvePiperModelPath(language: string): string {
     return path.resolve(modelDir, `${languageBase}.onnx`);
   }
 
-  throw new Error('PIPER_MODEL_NOT_CONFIGURED');
+  throw new Error("PIPER_MODEL_NOT_CONFIGURED");
 }
 
 export function validateTtsRuntimeConfig(): TtsRuntimeConfigValidation {
@@ -130,34 +132,46 @@ export function validateTtsRuntimeConfig(): TtsRuntimeConfigValidation {
   const errors: string[] = [];
   const warnings: string[] = [];
 
-  if (queueMode === 'bullmq' && !process.env.REDIS_URL) {
-    errors.push('REDIS_URL is required when queue mode is bullmq.');
+  if (queueMode === "bullmq" && !process.env.REDIS_URL) {
+    errors.push("REDIS_URL is required when queue mode is bullmq.");
   }
 
-  const configuredStorageProvider = (process.env.TTS_STORAGE_PROVIDER ?? 'local').trim().toLowerCase();
-  if (configuredStorageProvider !== 'local') {
-    errors.push('TTS_STORAGE_PROVIDER must be local.');
+  const configuredStorageProvider = (
+    process.env.TTS_STORAGE_PROVIDER ?? "local"
+  )
+    .trim()
+    .toLowerCase();
+  if (configuredStorageProvider !== "local") {
+    errors.push("TTS_STORAGE_PROVIDER must be local.");
   }
 
-  if (storageProvider === 'local' && !process.env.TTS_LOCAL_AUDIO_DIR?.trim()) {
-    warnings.push('TTS_LOCAL_AUDIO_DIR is not set. Using default public/audio directory.');
+  if (storageProvider === "local" && !process.env.TTS_LOCAL_AUDIO_DIR?.trim()) {
+    warnings.push(
+      "TTS_LOCAL_AUDIO_DIR is not set. Using default public/audio directory.",
+    );
   }
 
   if (!process.env.TTS_SUPPORTED_LANGUAGES?.trim()) {
-    warnings.push('TTS_SUPPORTED_LANGUAGES is not set. Falling back to default language list.');
+    warnings.push(
+      "TTS_SUPPORTED_LANGUAGES is not set. Falling back to default language list.",
+    );
   }
 
   const piperModelDir = process.env.PIPER_MODEL_DIR?.trim();
   const piperModelMap = process.env.PIPER_MODEL_MAP?.trim();
   if (!piperModelDir && !piperModelMap) {
-    warnings.push('PIPER_MODEL_DIR or PIPER_MODEL_MAP is not set. TTS generation may fail at runtime.');
+    warnings.push(
+      "PIPER_MODEL_DIR or PIPER_MODEL_MAP is not set. TTS generation may fail at runtime.",
+    );
   }
 
   if (piperModelMap) {
     try {
       parsePiperModelMap();
     } catch {
-      errors.push('PIPER_MODEL_MAP must be valid JSON object (e.g. {"vi":"./models/vi.onnx"}).');
+      errors.push(
+        'PIPER_MODEL_MAP must be valid JSON object (e.g. {"vi":"./models/vi.onnx"}).',
+      );
     }
   }
 
@@ -166,7 +180,7 @@ export function validateTtsRuntimeConfig(): TtsRuntimeConfigValidation {
     queueMode,
     storageProvider,
     errors,
-    warnings
+    warnings,
   };
 }
 
@@ -177,21 +191,43 @@ function getConfiguredLanguages(): string[] {
   }
 
   const parsed = envValue
-    .split(',')
+    .split(",")
     .map((lang) => lang.trim().toLowerCase())
     .filter(Boolean);
 
   return parsed.length > 0 ? parsed : [...DEFAULT_TTS_LANGUAGES];
 }
 
+function normalizePreviewLanguage(language: string): string {
+  const requested = language.trim().toLowerCase();
+  const fallback = "vi";
+  if (!requested) {
+    return fallback;
+  }
+
+  const configured = new Set(getConfiguredLanguages());
+  if (configured.has(requested)) {
+    return requested;
+  }
+
+  const base = requested.split("-")[0];
+  if (configured.has(base)) {
+    return base;
+  }
+
+  throw new Error("TTS_LANGUAGE_NOT_SUPPORTED");
+}
+
 function normalizeLocalizedTextMap(value: unknown): Record<string, string> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {};
   }
 
   const result: Record<string, string> = {};
-  for (const [key, rawValue] of Object.entries(value as Record<string, unknown>)) {
-    if (typeof rawValue !== 'string') {
+  for (const [key, rawValue] of Object.entries(
+    value as Record<string, unknown>,
+  )) {
+    if (typeof rawValue !== "string") {
       continue;
     }
 
@@ -207,15 +243,21 @@ function normalizeLocalizedTextMap(value: unknown): Record<string, string> {
 }
 
 function getLocalAudioDirectory(): string {
-  return process.env.TTS_LOCAL_AUDIO_DIR ?? path.resolve(process.cwd(), 'public/audio');
+  return (
+    process.env.TTS_LOCAL_AUDIO_DIR ??
+    path.resolve(process.cwd(), "public/audio")
+  );
 }
 
 function getPublicAudioBaseUrl(): string {
-  const configured = process.env.TTS_PUBLIC_BASE_URL ?? '/audio';
-  return configured.endsWith('/') ? configured.slice(0, -1) : configured;
+  const configured = process.env.TTS_PUBLIC_BASE_URL ?? "/audio";
+  return configured.endsWith("/") ? configured.slice(0, -1) : configured;
 }
 
-async function saveLocalAudioFile(fileName: string, content: Buffer): Promise<string> {
+async function saveLocalAudioFile(
+  fileName: string,
+  content: Buffer,
+): Promise<string> {
   const outputDir = getLocalAudioDirectory();
   await fs.mkdir(outputDir, { recursive: true });
 
@@ -225,7 +267,10 @@ async function saveLocalAudioFile(fileName: string, content: Buffer): Promise<st
   return `${getPublicAudioBaseUrl()}/${fileName}`;
 }
 
-async function saveAudioFile(fileName: string, content: Buffer): Promise<string> {
+async function saveAudioFile(
+  fileName: string,
+  content: Buffer,
+): Promise<string> {
   return saveLocalAudioFile(fileName, content);
 }
 
@@ -233,7 +278,7 @@ async function listLocalAudioFiles(): Promise<string[]> {
   try {
     return await fs.readdir(getLocalAudioDirectory());
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
       return [];
     }
 
@@ -241,34 +286,49 @@ async function listLocalAudioFiles(): Promise<string[]> {
   }
 }
 
-export async function cleanupPoiAudioFiles(poiId: string, keepFileNames: string[] = []): Promise<number> {
+export async function cleanupPoiAudioFiles(
+  poiId: string,
+  keepFileNames: string[] = [],
+): Promise<number> {
   const safePoiId = poiId.trim();
   if (!safePoiId) {
     return 0;
   }
 
-  const keepSet = new Set(keepFileNames.map((name) => name.trim()).filter(Boolean));
+  const keepSet = new Set(
+    keepFileNames.map((name) => name.trim()).filter(Boolean),
+  );
   const directory = getLocalAudioDirectory();
   const files = await listLocalAudioFiles();
   let removedCount = 0;
 
   await Promise.all(
     files
-      .filter((fileName) => fileName.startsWith(`${safePoiId}_`) && !keepSet.has(fileName))
+      .filter(
+        (fileName) =>
+          fileName.startsWith(`${safePoiId}_`) && !keepSet.has(fileName),
+      )
       .map(async (fileName) => {
         try {
           await fs.rm(path.join(directory, fileName), { force: true });
           removedCount += 1;
         } catch (error) {
-          console.warn('[TTS] Failed to cleanup audio file', { fileName, error });
+          console.warn("[TTS] Failed to cleanup audio file", {
+            fileName,
+            error,
+          });
         }
-      })
+      }),
   );
 
   return removedCount;
 }
 
-async function cleanupOlderPoiAudioVersions(poiId: string, language: string, keepFileName: string): Promise<number> {
+async function cleanupOlderPoiAudioVersions(
+  poiId: string,
+  language: string,
+  keepFileName: string,
+): Promise<number> {
   const safePoiId = poiId.trim();
   const safeLanguage = language.trim().toLowerCase();
   if (!safePoiId || !safeLanguage) {
@@ -284,60 +344,78 @@ async function cleanupOlderPoiAudioVersions(poiId: string, language: string, kee
       .filter(
         (fileName) =>
           fileName.startsWith(`${safePoiId}_${safeLanguage}_v`) &&
-          fileName !== keepFileName
+          fileName !== keepFileName,
       )
       .map(async (fileName) => {
         try {
           await fs.rm(path.join(directory, fileName), { force: true });
           removedCount += 1;
         } catch (error) {
-          console.warn('[TTS] Failed to cleanup stale audio version', { fileName, error });
+          console.warn("[TTS] Failed to cleanup stale audio version", {
+            fileName,
+            error,
+          });
         }
-      })
+      }),
   );
 
   return removedCount;
 }
 
-async function synthesizeWithPiper(text: string, language: string): Promise<Buffer> {
+async function synthesizeWithPiper(
+  text: string,
+  language: string,
+): Promise<Buffer> {
   const modelPath = resolvePiperModelPath(language);
-  await fs.access(modelPath);
+  try {
+    await fs.access(modelPath);
+  } catch {
+    throw new Error("PIPER_MODEL_FILE_NOT_FOUND");
+  }
 
   const outputPath = path.join(
     os.tmpdir(),
-    `piper-${Date.now()}-${Math.random().toString(16).slice(2)}-${language}.wav`
+    `piper-${Date.now()}-${Math.random().toString(16).slice(2)}-${language}.wav`,
   );
 
   const piperBin = getPiperBinary();
-  const args = ['--model', modelPath, '--output_file', outputPath];
+  const args = ["--model", modelPath, "--output_file", outputPath];
 
   const stderrChunks: Buffer[] = [];
 
   await new Promise<void>((resolve, reject) => {
     const child = spawn(piperBin, args, {
-      stdio: ['pipe', 'ignore', 'pipe']
+      stdio: ["pipe", "ignore", "pipe"],
     });
 
-    child.on('error', (error) => {
+    child.on("error", (error) => {
+      const errorCode = (error as NodeJS.ErrnoException).code;
+      if (errorCode === "ENOENT") {
+        reject(new Error("PIPER_BIN_NOT_FOUND"));
+        return;
+      }
+
       reject(new Error(`PIPER_EXECUTION_FAILED: ${String(error)}`));
     });
 
-    child.stderr.on('data', (chunk: Buffer) => {
+    child.stderr.on("data", (chunk: Buffer) => {
       stderrChunks.push(chunk);
     });
 
-    child.on('close', (code) => {
+    child.on("close", (code) => {
       if (code === 0) {
         resolve();
         return;
       }
 
-      const stderr = Buffer.concat(stderrChunks).toString('utf8').trim();
-      reject(new Error(`PIPER_PROCESS_EXIT_${code}${stderr ? `: ${stderr}` : ''}`));
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+      reject(
+        new Error(`PIPER_PROCESS_EXIT_${code}${stderr ? `: ${stderr}` : ""}`),
+      );
     });
 
     child.stdin.write(text);
-    child.stdin.write('\n');
+    child.stdin.write("\n");
     child.stdin.end();
   });
 
@@ -348,17 +426,47 @@ async function synthesizeWithPiper(text: string, language: string): Promise<Buff
   }
 }
 
-async function processTtsJob(payload: TtsJobPayload): Promise<{ poiId: string; language: string; audioUrl: string }> {
+export async function synthesizePreviewAudioFromText(
+  text: string,
+  language = "vi",
+): Promise<{
+  language: string;
+  audioBuffer: Buffer;
+}> {
+  const normalizedText = text.trim();
+  if (!normalizedText) {
+    throw new Error("TTS_TEXT_EMPTY");
+  }
+
+  if (normalizedText.length > 2000) {
+    throw new Error("TTS_TEXT_TOO_LONG");
+  }
+
+  const normalizedLanguage = normalizePreviewLanguage(language);
+  const audioBuffer = await synthesizeWithPiper(
+    normalizedText,
+    normalizedLanguage,
+  );
+
+  return {
+    language: normalizedLanguage,
+    audioBuffer,
+  };
+}
+
+async function processTtsJob(
+  payload: TtsJobPayload,
+): Promise<{ poiId: string; language: string; audioUrl: string }> {
   const poi = await prisma.pointOfInterest.findUnique({
     where: { id: payload.poiId },
     select: {
       id: true,
-      audioUrls: true
-    }
+      audioUrls: true,
+    },
   });
 
   if (!poi) {
-    throw new Error('POI_NOT_FOUND');
+    throw new Error("POI_NOT_FOUND");
   }
 
   const audioBuffer = await synthesizeWithPiper(payload.text, payload.language);
@@ -380,7 +488,7 @@ async function processTtsJob(payload: TtsJobPayload): Promise<{ poiId: string; l
   return {
     poiId: payload.poiId,
     language: payload.language,
-    audioUrl
+    audioUrl,
   };
 }
 
@@ -390,50 +498,58 @@ function ensureBullQueue(): Queue {
   }
 
   if (!process.env.REDIS_URL) {
-    throw new Error('REDIS_URL_NOT_CONFIGURED');
+    throw new Error("REDIS_URL_NOT_CONFIGURED");
   }
 
   const createdQueue = new Queue(TTS_QUEUE_NAME, {
     connection: {
       url: process.env.REDIS_URL,
-      maxRetriesPerRequest: null
+      maxRetriesPerRequest: null,
     },
-    defaultJobOptions: DEFAULT_JOB_OPTIONS
+    defaultJobOptions: DEFAULT_JOB_OPTIONS,
   });
 
   ttsQueue = createdQueue;
   return ttsQueue;
 }
 
-export function buildTtsJobId(poiId: string, language: string, contentVersion: number): string {
+export function buildTtsJobId(
+  poiId: string,
+  language: string,
+  contentVersion: number,
+): string {
   return `${poiId}:${language}:${contentVersion}`;
 }
 
-export function resolveTtsLanguages(descriptionMap: Record<string, string>): string[] {
+export function resolveTtsLanguages(
+  descriptionMap: Record<string, string>,
+): string[] {
   const configured = new Set(getConfiguredLanguages());
   return Object.keys(descriptionMap)
     .map((lang) => lang.toLowerCase())
     .filter((lang) => configured.has(lang));
 }
 
-export async function enqueuePoiTtsGeneration(poiId: string): Promise<EnqueuePoiTtsResult> {
+export async function enqueuePoiTtsGeneration(
+  poiId: string,
+): Promise<EnqueuePoiTtsResult> {
   const poi = await prisma.pointOfInterest.findUnique({
     where: { id: poiId },
     select: {
       id: true,
       description: true,
-      contentVersion: true
-    }
+      contentVersion: true,
+    },
   });
 
   if (!poi) {
-    throw new Error('POI_NOT_FOUND');
+    throw new Error("POI_NOT_FOUND");
   }
 
   const descriptionMap = normalizeLocalizedTextMap(poi.description);
   const languages = resolveTtsLanguages(descriptionMap);
   if (languages.length === 0) {
-    throw new Error('TTS_NO_SUPPORTED_LANGUAGE_TEXT');
+    throw new Error("TTS_NO_SUPPORTED_LANGUAGE_TEXT");
   }
 
   const mode = getQueueMode();
@@ -441,7 +557,7 @@ export async function enqueuePoiTtsGeneration(poiId: string): Promise<EnqueuePoi
   let skipped = 0;
   const jobIds: string[] = [];
 
-  if (mode === 'bullmq') {
+  if (mode === "bullmq") {
     const queue = ensureBullQueue();
     for (const language of languages) {
       const jobId = buildTtsJobId(poi.id, language, poi.contentVersion);
@@ -455,16 +571,16 @@ export async function enqueuePoiTtsGeneration(poiId: string): Promise<EnqueuePoi
 
       try {
         await queue.add(
-          'generate-poi-audio',
+          "generate-poi-audio",
           {
             poiId: poi.id,
             language,
             text: descriptionMap[language],
-            contentVersion: poi.contentVersion
+            contentVersion: poi.contentVersion,
           },
           {
-            jobId
-          }
+            jobId,
+          },
         );
         queued += 1;
       } catch (error) {
@@ -488,10 +604,10 @@ export async function enqueuePoiTtsGeneration(poiId: string): Promise<EnqueuePoi
         poiId: poi.id,
         language,
         text: descriptionMap[language],
-        contentVersion: poi.contentVersion
+        contentVersion: poi.contentVersion,
       })
         .catch((error: unknown) => {
-          console.error('[TTS] In-memory job failed', { jobId, error });
+          console.error("[TTS] In-memory job failed", { jobId, error });
         })
         .finally(() => {
           inMemoryInFlightJobs.delete(jobId);
@@ -504,12 +620,12 @@ export async function enqueuePoiTtsGeneration(poiId: string): Promise<EnqueuePoi
     queued,
     skipped,
     jobIds,
-    mode
+    mode,
   };
 }
 
 export async function initializeTtsWorker(): Promise<void> {
-  if (getQueueMode() !== 'bullmq') {
+  if (getQueueMode() !== "bullmq") {
     return;
   }
 
@@ -527,14 +643,14 @@ export async function initializeTtsWorker(): Promise<void> {
     {
       connection: {
         url: process.env.REDIS_URL,
-        maxRetriesPerRequest: null
+        maxRetriesPerRequest: null,
       },
-      concurrency: Number(process.env.TTS_WORKER_CONCURRENCY ?? 5)
-    }
+      concurrency: Number(process.env.TTS_WORKER_CONCURRENCY ?? 5),
+    },
   );
 
-  ttsWorker.on('failed', (job, err) => {
-    const jobId = job?.id ?? 'unknown';
+  ttsWorker.on("failed", (job, err) => {
+    const jobId = job?.id ?? "unknown";
     console.error(`[TTS] Job failed: ${jobId}`, err);
   });
 
@@ -551,25 +667,31 @@ export async function getTtsQueueStatus(): Promise<{
   delayed: number;
 }> {
   const mode = getQueueMode();
-  if (mode === 'in-memory') {
+  if (mode === "in-memory") {
     return {
       mode,
       waiting: inMemoryInFlightJobs.size,
       active: inMemoryInFlightJobs.size,
       completed: 0,
       failed: 0,
-      delayed: 0
+      delayed: 0,
     };
   }
 
   const queue = ensureBullQueue();
-  const counts = await queue.getJobCounts('waiting', 'active', 'completed', 'failed', 'delayed');
+  const counts = await queue.getJobCounts(
+    "waiting",
+    "active",
+    "completed",
+    "failed",
+    "delayed",
+  );
   return {
     mode,
     waiting: counts.waiting ?? 0,
     active: counts.active ?? 0,
     completed: counts.completed ?? 0,
     failed: counts.failed ?? 0,
-    delayed: counts.delayed ?? 0
+    delayed: counts.delayed ?? 0,
   };
 }

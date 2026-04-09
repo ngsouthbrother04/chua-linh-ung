@@ -4,6 +4,7 @@ import { MapContainer, Marker, TileLayer, useMapEvents } from "react-leaflet";
 import L from "leaflet";
 import { useTranslation } from "../hooks/useLanguageContext";
 import { useToast } from "../hooks/useToast";
+import { ttsAPI } from "../lib/api";
 
 function formatSubmittedAt(isoValue) {
   if (!isoValue) return "-";
@@ -16,64 +17,6 @@ function clampCoordinate(value, min, max) {
   const number = Number(value);
   if (!Number.isFinite(number)) return null;
   return Math.max(min, Math.min(max, number));
-}
-
-function buildWavDataUrlFromDescription(text) {
-  const cleanText = (text || "").trim();
-  if (!cleanText) return null;
-
-  const sampleRate = 16000;
-  const baseDurationPerChar = 0.055;
-  const durationSeconds = Math.min(
-    16,
-    Math.max(1.5, cleanText.length * baseDurationPerChar),
-  );
-  const totalSamples = Math.floor(sampleRate * durationSeconds);
-  const pcm = new Int16Array(totalSamples);
-
-  for (let i = 0; i < totalSamples; i += 1) {
-    const char = cleanText.charCodeAt(i % cleanText.length);
-    const freq = 220 + (char % 36) * 10;
-    const t = i / sampleRate;
-    const envelope =
-      Math.min(1, i / 900) * Math.min(1, (totalSamples - i) / 1200);
-    const sample = Math.sin(2 * Math.PI * freq * t) * 0.22 * envelope;
-    pcm[i] = Math.max(-1, Math.min(1, sample)) * 32767;
-  }
-
-  const headerSize = 44;
-  const dataSize = pcm.length * 2;
-  const buffer = new ArrayBuffer(headerSize + dataSize);
-  const view = new DataView(buffer);
-
-  const writeString = (offset, value) => {
-    for (let i = 0; i < value.length; i += 1) {
-      view.setUint8(offset + i, value.charCodeAt(i));
-    }
-  };
-
-  writeString(0, "RIFF");
-  view.setUint32(4, 36 + dataSize, true);
-  writeString(8, "WAVE");
-  writeString(12, "fmt ");
-  view.setUint32(16, 16, true);
-  view.setUint16(20, 1, true);
-  view.setUint16(22, 1, true);
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * 2, true);
-  view.setUint16(32, 2, true);
-  view.setUint16(34, 16, true);
-  writeString(36, "data");
-  view.setUint32(40, dataSize, true);
-
-  let offset = 44;
-  for (let i = 0; i < pcm.length; i += 1) {
-    view.setInt16(offset, pcm[i], true);
-    offset += 2;
-  }
-
-  const blob = new Blob([buffer], { type: "audio/wav" });
-  return URL.createObjectURL(blob);
 }
 
 function CoordinatePicker({ onPick, markerPosition }) {
@@ -137,6 +80,9 @@ export default function PartnerProfile() {
   const [imagePreview, setImagePreview] = useState("");
   const [imageName, setImageName] = useState("");
   const [generatedAudioUrl, setGeneratedAudioUrl] = useState("");
+  const [audioGeneratedWith, setAudioGeneratedWith] = useState("");
+  const [audioError, setAudioError] = useState("");
+  const [isGeneratingAudio, setIsGeneratingAudio] = useState(false);
   const [isCreatingPoint, setIsCreatingPoint] = useState(false);
   const [editingPointId, setEditingPointId] = useState(null);
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
@@ -228,25 +174,37 @@ export default function PartnerProfile() {
     reader.readAsDataURL(file);
   };
 
-  const handleGenerateAudio = () => {
+  const handleGenerateAudio = async () => {
     const text = pointDescription.trim();
     if (!text) {
       showError("Vui lòng nhập mô tả để tạo audio test.");
       return;
     }
 
-    const nextUrl = buildWavDataUrlFromDescription(text);
-    if (!nextUrl) {
-      showError("Không thể tạo audio test.");
-      return;
-    }
+    setIsGeneratingAudio(true);
 
-    if (generatedAudioUrl) {
-      URL.revokeObjectURL(generatedAudioUrl);
-    }
+    try {
+      const { audioUrl } = await ttsAPI.previewFromText(text, "vi");
+      if (generatedAudioUrl) {
+        URL.revokeObjectURL(generatedAudioUrl);
+      }
 
-    setGeneratedAudioUrl(nextUrl);
-    showSuccess("Đã tạo audio test (UI). Bạn có thể phát trực tiếp bên dưới.");
+      setGeneratedAudioUrl(audioUrl);
+      setAudioGeneratedWith("server");
+      setAudioError("");
+      showSuccess("Đã tạo audio test từ backend TTS.");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Không thể tạo audio test từ backend.";
+      setAudioError(message);
+      setGeneratedAudioUrl("");
+      setAudioGeneratedWith("");
+      showError(`Tạo audio thất bại: ${message}`);
+    } finally {
+      setIsGeneratingAudio(false);
+    }
   };
 
   const handleMapPick = (lat, lng) => {
@@ -265,6 +223,8 @@ export default function PartnerProfile() {
     setImagePreview("");
     setImageName("");
     setGeneratedAudioUrl("");
+    setAudioGeneratedWith("");
+    setAudioError("");
   };
 
   const closePoiModal = () => {
@@ -292,6 +252,8 @@ export default function PartnerProfile() {
     setImagePreview(point.image || "");
     setImageName(point.imageName || "");
     setGeneratedAudioUrl("");
+    setAudioGeneratedWith("");
+    setAudioError("");
   };
 
   const handleDeletePoint = (pointId) => {
@@ -793,27 +755,55 @@ export default function PartnerProfile() {
 
               <div className="mt-3 rounded-xl border border-slate-200 p-3">
                 <p className="mb-2 text-sm font-semibold text-slate-900">
-                  Audio test từ mô tả (UI)
+                  Audio test từ mô tả (Backend TTS)
                 </p>
                 <button
                   type="button"
                   onClick={handleGenerateAudio}
+                  disabled={isGeneratingAudio}
                   className="h-10 rounded-lg bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700"
                 >
-                  Tạo audio test
+                  {isGeneratingAudio ? "Đang tạo audio..." : "Tạo audio test"}
                 </button>
+
+                {audioError && (
+                  <p className="mt-2 text-xs font-semibold text-rose-600">
+                    Lỗi tạo audio: {audioError}
+                  </p>
+                )}
+
                 {generatedAudioUrl && (
                   <div className="mt-3">
+                    <p className="mb-2 text-xs font-semibold text-slate-500">
+                      Nguồn audio:{" "}
+                      {audioGeneratedWith === "server" ? "Backend TTS" : "-"}
+                    </p>
                     <audio controls className="w-full">
                       <source src={generatedAudioUrl} type="audio/wav" />
                     </audio>
-                    <button
-                      type="button"
-                      onClick={() => setGeneratedAudioUrl("")}
-                      className="mt-2 h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
-                    >
-                      Xóa audio test
-                    </button>
+                    <div className="mt-2 flex items-center gap-2">
+                      <a
+                        href={generatedAudioUrl}
+                        download={`poi-preview-${Date.now()}.wav`}
+                        className="inline-flex h-8 items-center rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        Tải audio test
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (generatedAudioUrl) {
+                            URL.revokeObjectURL(generatedAudioUrl);
+                          }
+                          setGeneratedAudioUrl("");
+                          setAudioGeneratedWith("");
+                          setAudioError("");
+                        }}
+                        className="h-8 rounded-md border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        Xóa audio test
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
