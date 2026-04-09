@@ -85,12 +85,12 @@ Kết luận cho teammate Windows:
 
 - `apps/backend/scripts/setup-piper-windows.ps1`
 
-Script này sẽ làm toàn bộ:
+Script này sẽ làm toàn bộ theo đúng `TTS_SUPPORTED_LANGUAGES` trong `apps/backend/.env`:
 
 1. Cài `piper-tts` bằng pip.
 2. Tự dò `piper.exe` thực tế trên máy.
-3. Tải model `vi.onnx` với URL dự phòng.
-4. Chạy smoke test sinh file WAV để xác nhận model dùng được.
+3. Tải model cho từng ngôn ngữ đang cấu hình, ví dụ hiện tại: `vi,en,fr,de,es,pt,ru,zh,id,hi,ar,tr`.
+4. Chạy smoke test sinh file WAV để xác nhận Piper dùng được.
 5. Tự cập nhật `apps/backend/.env` với `PIPER_BIN`, `PIPER_MODEL_DIR`, `PIPER_MODEL_MAP`.
 
 ### Bước A - Kiểm tra Python launcher
@@ -115,7 +115,7 @@ powershell -ExecutionPolicy Bypass -File .\apps\backend\scripts\setup-piper-wind
 Khi thành công, script in ra:
 
 - đường dẫn `piper.exe` đã resolve
-- file model đã tải
+- danh sách ngôn ngữ đã tải
 - xác nhận cập nhật `.env`
 
 ### Bước C - Verify backend config
@@ -140,6 +140,8 @@ npm run dev:backend
 3. Kiểm tra audio được tạo trong thư mục local provider:
 
 - `apps/backend/public/audio`
+
+Nếu bạn thay đổi danh sách ngôn ngữ trong `TTS_SUPPORTED_LANGUAGES`, chỉ cần chạy lại script này để tải bộ model tương ứng.
 
 Nếu có file audio mới được sinh ra, pipeline Piper TTS đã hoạt động.
 
