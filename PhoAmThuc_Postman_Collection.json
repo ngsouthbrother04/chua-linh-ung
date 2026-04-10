@@ -78,7 +78,11 @@
                 "exec": [
                   "let data = {};",
                   "try { data = pm.response.json(); } catch (e) {}",
-                  "if (data?.id) pm.collectionVariables.set('approvalRequestId', data.id);"
+                  "const createdPoiId = data?.data?.id || data?.id;",
+                  "if (createdPoiId) {",
+                  "  pm.collectionVariables.set('poiId', createdPoiId);",
+                  "  pm.collectionVariables.set('approvedPoiId', createdPoiId);",
+                  "}"
                 ]
               }
             }
@@ -114,7 +118,7 @@
           }
         },
         {
-          "name": "4) PARTNER Check My Requests",
+          "name": "4) Verify Created POI (Public)",
           "request": {
             "method": "GET",
             "header": [
@@ -124,22 +128,15 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/partner/approval-requests/mine?status=PENDING",
+              "raw": "{{baseUrl}}/api/v1/pois/{{poiId}}",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "v1",
-                "partner",
-                "approval-requests",
-                "mine"
-              ],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "PENDING"
-                }
+                "pois",
+                "{{poiId}}"
               ]
             }
           }
@@ -187,7 +184,7 @@
           }
         },
         {
-          "name": "6) ADMIN List Pending Requests",
+          "name": "6) ADMIN List POIs",
           "request": {
             "method": "GET",
             "header": [
@@ -197,7 +194,7 @@
               }
             ],
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/approval-requests?status=PENDING",
+              "raw": "{{baseUrl}}/api/v1/admin/pois",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -205,19 +202,13 @@
                 "api",
                 "v1",
                 "admin",
-                "approval-requests"
-              ],
-              "query": [
-                {
-                  "key": "status",
-                  "value": "PENDING"
-                }
+                "pois"
               ]
             }
           }
         },
         {
-          "name": "7) ADMIN Approve Request",
+          "name": "7) ADMIN Publish POI",
           "event": [
             {
               "listen": "test",
@@ -249,7 +240,7 @@
               "raw": "{\n  \"decisionNote\": \"Smoke test approve\"\n}"
             },
             "url": {
-              "raw": "{{baseUrl}}/api/v1/admin/approval-requests/{{approvalRequestId}}/approve",
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/publish",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -257,9 +248,9 @@
                 "api",
                 "v1",
                 "admin",
-                "approval-requests",
-                "{{approvalRequestId}}",
-                "approve"
+                "pois",
+                "{{poiId}}",
+                "publish"
               ]
             }
           }
@@ -317,6 +308,134 @@
                 "v1",
                 "pois",
                 "{{poiId}}"
+              ]
+            }
+          }
+        },
+        {
+          "name": "10) ADMIN Validate TTS Config",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "pm.test('TTS runtime is valid', function () { pm.expect(data.ok).to.eql(true); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/tts/config/validate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "tts",
+                "config",
+                "validate"
+              ]
+            }
+          }
+        },
+        {
+          "name": "11) USER TTS Preview Audio",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns wav audio', function () {",
+                  "  const contentType = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(contentType.toLowerCase()).to.include('audio/wav');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"{{ttsPreviewText}}\",\n  \"language\": \"{{ttsPreviewLanguage}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/tts-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "tts-preview"
+              ]
+            }
+          }
+        },
+        {
+          "name": "12) ADMIN Queue POI TTS Generation",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 202', function () { pm.response.to.have.status(202); });",
+                  "let data = {};",
+                  "try { data = pm.response.json(); } catch (e) {}",
+                  "if (Array.isArray(data.jobIds) && data.jobIds.length) pm.collectionVariables.set('ttsJobId', String(data.jobIds[0]));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{adminToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/admin/pois/{{poiId}}/audio/generate",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "pois",
+                "{{poiId}}",
+                "audio",
+                "generate"
               ]
             }
           }
@@ -667,6 +786,53 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"oldPassword\": \"string\",\n  \"newPassword\": \"string\"\n}"
+            }
+          }
+        },
+        {
+          "name": "TTS Preview [POST]",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns wav audio', function () {",
+                  "  const contentType = pm.response.headers.get('Content-Type') || '';",
+                  "  pm.expect(contentType.toLowerCase()).to.include('audio/wav');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/users/tts-preview",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "users",
+                "tts-preview"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"text\": \"{{ttsPreviewText}}\",\n  \"language\": \"{{ttsPreviewLanguage}}\"\n}"
             }
           }
         }
@@ -2197,6 +2363,16 @@
       "type": "string"
     },
     {
+      "key": "ttsPreviewText",
+      "value": "Xin chao, day la bai test Google TTS tu Postman.",
+      "type": "string"
+    },
+    {
+      "key": "ttsPreviewLanguage",
+      "value": "vi",
+      "type": "string"
+    },
+    {
       "key": "partnerEmail",
       "value": "partner@phoamthuc.local",
       "type": "string"
@@ -2228,6 +2404,11 @@
     },
     {
       "key": "approvedPoiId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "ttsJobId",
       "value": "",
       "type": "string"
     }
