@@ -1,7 +1,7 @@
-import prisma from '../lib/prisma';
-import ApiError from '../utils/ApiError';
-import { recordAdminAuditEvent } from './adminAuditService';
-import { revokeAllUserAccessTokens, type UserRole } from './authService';
+import prisma from "../lib/prisma";
+import ApiError from "../utils/ApiError";
+import { recordAdminAuditEvent } from "./adminAuditService";
+import { revokeAllUserAccessTokens, type UserRole } from "./authService";
 
 export interface AdminUserListItem {
   id: string;
@@ -22,18 +22,32 @@ export interface UpdateUserRoleResult {
   reauthRequired: boolean;
 }
 
-const ALLOWED_ROLES = new Set<UserRole>(['USER', 'PARTNER', 'ADMIN']);
+export interface UpdateUserAccessResult {
+  id: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+  previousIsActive: boolean;
+  reason?: string;
+  reauthRequired: boolean;
+}
+
+const ALLOWED_ROLES = new Set<UserRole>(["USER", "PARTNER", "ADMIN"]);
 
 function toRole(value: unknown): UserRole {
-  if (value === 'ADMIN' || value === 'PARTNER' || value === 'USER') {
+  if (value === "ADMIN" || value === "PARTNER" || value === "USER") {
     return value;
   }
 
-  throw new ApiError(400, 'role chỉ chấp nhận USER, PARTNER hoặc ADMIN.');
+  throw new ApiError(400, "role chỉ chấp nhận USER, PARTNER hoặc ADMIN.");
 }
 
-async function getUserById(userId: string): Promise<{ id: string; email: string; role: UserRole } | null> {
-  const rows = await prisma.$queryRaw<Array<{ id: string; email: string; role: string }>>`
+async function getUserById(
+  userId: string,
+): Promise<{ id: string; email: string; role: UserRole } | null> {
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string; email: string; role: string }>
+  >`
     SELECT id::text, email, role::text AS role
     FROM users
     WHERE id = ${userId}
@@ -47,7 +61,36 @@ async function getUserById(userId: string): Promise<{ id: string; email: string;
   return {
     id: rows[0].id,
     email: rows[0].email,
-    role: toRole(rows[0].role)
+    role: toRole(rows[0].role),
+  };
+}
+
+async function getUserSecurityById(
+  userId: string,
+): Promise<{
+  id: string;
+  email: string;
+  role: UserRole;
+  isActive: boolean;
+} | null> {
+  const rows = await prisma.$queryRaw<
+    Array<{ id: string; email: string; role: string; is_active: boolean }>
+  >`
+    SELECT id::text, email, role::text AS role, is_active
+    FROM users
+    WHERE id = ${userId}
+    LIMIT 1
+  `;
+
+  if (!rows[0]) {
+    return null;
+  }
+
+  return {
+    id: rows[0].id,
+    email: rows[0].email,
+    role: toRole(rows[0].role),
+    isActive: rows[0].is_active,
   };
 }
 
@@ -61,38 +104,45 @@ async function countActiveAdmins(): Promise<number> {
   return rows[0]?.total ?? 0;
 }
 
-export async function listAdminUsers(filter?: { role?: string }): Promise<AdminUserListItem[]> {
-  const requestedRole = typeof filter?.role === 'string' ? filter.role.trim().toUpperCase() : '';
+export async function listAdminUsers(filter?: {
+  role?: string;
+}): Promise<AdminUserListItem[]> {
+  const requestedRole =
+    typeof filter?.role === "string" ? filter.role.trim().toUpperCase() : "";
 
   if (requestedRole && !ALLOWED_ROLES.has(requestedRole as UserRole)) {
-    throw new ApiError(400, 'role chỉ chấp nhận USER, PARTNER hoặc ADMIN.');
+    throw new ApiError(400, "role chỉ chấp nhận USER, PARTNER hoặc ADMIN.");
   }
 
   const queryResult = requestedRole
-    ? await prisma.$queryRaw<Array<{
-        id: string;
-        email: string;
-        full_name: string | null;
-        role: string;
-        is_active: boolean;
-        created_at: Date;
-        updated_at: Date;
-      }>>`
+    ? await prisma.$queryRaw<
+        Array<{
+          id: string;
+          email: string;
+          full_name: string | null;
+          role: string;
+          is_active: boolean;
+          created_at: Date;
+          updated_at: Date;
+        }>
+      >`
         SELECT id::text, email, full_name, role::text AS role, is_active, created_at, updated_at
         FROM users
         WHERE role = ${requestedRole}::"UserRole"
         ORDER BY created_at DESC
         LIMIT 200
       `
-    : await prisma.$queryRaw<Array<{
-        id: string;
-        email: string;
-        full_name: string | null;
-        role: string;
-        is_active: boolean;
-        created_at: Date;
-        updated_at: Date;
-      }>>`
+    : await prisma.$queryRaw<
+        Array<{
+          id: string;
+          email: string;
+          full_name: string | null;
+          role: string;
+          is_active: boolean;
+          created_at: Date;
+          updated_at: Date;
+        }>
+      >`
         SELECT id::text, email, full_name, role::text AS role, is_active, created_at, updated_at
         FROM users
         ORDER BY created_at DESC
@@ -106,7 +156,7 @@ export async function listAdminUsers(filter?: { role?: string }): Promise<AdminU
     role: toRole(row.role),
     isActive: row.is_active,
     createdAt: row.created_at.toISOString(),
-    updatedAt: row.updated_at.toISOString()
+    updatedAt: row.updated_at.toISOString(),
   }));
 }
 
@@ -119,41 +169,53 @@ export async function assignAdminUserRole(input: {
   const actorId = input.actorId.trim();
   const targetUserId = input.targetUserId.trim();
   const nextRole = toRole(input.nextRole.trim().toUpperCase());
-  const reason = typeof input.reason === 'string' ? input.reason.trim() || undefined : undefined;
+  const reason =
+    typeof input.reason === "string"
+      ? input.reason.trim() || undefined
+      : undefined;
 
   if (!actorId || !targetUserId) {
-    throw new ApiError(400, 'Thiếu actorId hoặc targetUserId hợp lệ.');
+    throw new ApiError(400, "Thiếu actorId hoặc targetUserId hợp lệ.");
   }
 
-  const [actor, target] = await Promise.all([getUserById(actorId), getUserById(targetUserId)]);
+  const [actor, target] = await Promise.all([
+    getUserById(actorId),
+    getUserById(targetUserId),
+  ]);
 
   if (!actor) {
-    throw new ApiError(403, 'Không tìm thấy actor admin hợp lệ.');
+    throw new ApiError(403, "Không tìm thấy actor admin hợp lệ.");
   }
 
-  if (actor.role !== 'ADMIN') {
-    throw new ApiError(403, 'Chỉ ADMIN mới có quyền cập nhật role.');
+  if (actor.role !== "ADMIN") {
+    throw new ApiError(403, "Chỉ ADMIN mới có quyền cập nhật role.");
   }
 
   if (!target) {
-    throw new ApiError(404, 'Không tìm thấy user cần cập nhật role.');
+    throw new ApiError(404, "Không tìm thấy user cần cập nhật role.");
   }
 
   const previousRole = target.role;
 
-  if (actorId === targetUserId && nextRole !== 'ADMIN') {
+  if (actorId === targetUserId && nextRole !== "ADMIN") {
     const activeAdminCount = await countActiveAdmins();
-    if (previousRole === 'ADMIN' && activeAdminCount <= 1) {
-      throw new ApiError(409, 'Không thể hạ quyền ADMIN cuối cùng trong hệ thống.');
+    if (previousRole === "ADMIN" && activeAdminCount <= 1) {
+      throw new ApiError(
+        409,
+        "Không thể hạ quyền ADMIN cuối cùng trong hệ thống.",
+      );
     }
 
-    throw new ApiError(409, 'Không được tự hạ quyền của chính mình.');
+    throw new ApiError(409, "Không được tự hạ quyền của chính mình.");
   }
 
-  if (previousRole === 'ADMIN' && nextRole !== 'ADMIN') {
+  if (previousRole === "ADMIN" && nextRole !== "ADMIN") {
     const activeAdminCount = await countActiveAdmins();
     if (activeAdminCount <= 1) {
-      throw new ApiError(409, 'Không thể hạ quyền ADMIN cuối cùng trong hệ thống.');
+      throw new ApiError(
+        409,
+        "Không thể hạ quyền ADMIN cuối cùng trong hệ thống.",
+      );
     }
   }
 
@@ -168,18 +230,18 @@ export async function assignAdminUserRole(input: {
   }
 
   await recordAdminAuditEvent({
-    action: 'user.role.update',
-    entity: 'user',
+    action: "user.role.update",
+    entity: "user",
     entityId: targetUserId,
     actor: actorId,
     reason,
-    source: 'api',
+    source: "api",
     metadata: {
       targetUserId,
       previousRole,
       newRole: nextRole,
-      tokenRevoked: previousRole !== nextRole
-    }
+      tokenRevoked: previousRole !== nextRole,
+    },
   });
 
   return {
@@ -188,7 +250,7 @@ export async function assignAdminUserRole(input: {
     role: nextRole,
     previousRole,
     reason,
-    reauthRequired: previousRole !== nextRole
+    reauthRequired: previousRole !== nextRole,
   };
 }
 
@@ -200,7 +262,90 @@ export async function revokeAdminUserRole(input: {
   return assignAdminUserRole({
     actorId: input.actorId,
     targetUserId: input.targetUserId,
-    nextRole: 'USER',
-    reason: input.reason
+    nextRole: "USER",
+    reason: input.reason,
   });
+}
+
+export async function setAdminUserAccessStatus(input: {
+  actorId: string;
+  targetUserId: string;
+  isActive: boolean;
+  reason?: string;
+}): Promise<UpdateUserAccessResult> {
+  const actorId = input.actorId.trim();
+  const targetUserId = input.targetUserId.trim();
+  const isActive = Boolean(input.isActive);
+  const reason =
+    typeof input.reason === "string"
+      ? input.reason.trim() || undefined
+      : undefined;
+
+  if (!actorId || !targetUserId) {
+    throw new ApiError(400, "Thiếu actorId hoặc targetUserId hợp lệ.");
+  }
+
+  const [actor, target] = await Promise.all([
+    getUserById(actorId),
+    getUserSecurityById(targetUserId),
+  ]);
+
+  if (!actor) {
+    throw new ApiError(403, "Không tìm thấy actor admin hợp lệ.");
+  }
+
+  if (actor.role !== "ADMIN") {
+    throw new ApiError(
+      403,
+      "Chỉ ADMIN mới có quyền khóa hoặc mở khóa tài khoản.",
+    );
+  }
+
+  if (!target) {
+    throw new ApiError(
+      404,
+      "Không tìm thấy user cần cập nhật trạng thái tài khoản.",
+    );
+  }
+
+  if (target.role === "ADMIN" && !isActive) {
+    throw new ApiError(409, "Không thể khóa tài khoản có role ADMIN.");
+  }
+
+  const previousIsActive = target.isActive;
+
+  if (previousIsActive !== isActive) {
+    await prisma.$executeRaw`
+      UPDATE users
+      SET is_active = ${isActive}, updated_at = NOW()
+      WHERE id = ${targetUserId}
+    `;
+
+    await revokeAllUserAccessTokens(targetUserId);
+  }
+
+  await recordAdminAuditEvent({
+    action: "user.access.update",
+    entity: "user",
+    entityId: targetUserId,
+    actor: actorId,
+    reason,
+    source: "api",
+    metadata: {
+      targetUserId,
+      previousIsActive,
+      newIsActive: isActive,
+      tokenRevoked: previousIsActive !== isActive,
+    },
+  });
+
+  return {
+    id: target.id,
+    email: target.email,
+    role: target.role,
+    isActive,
+    previousIsActive,
+    reason,
+    reauthRequired: previousIsActive !== isActive,
+  };
 }

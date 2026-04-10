@@ -72,10 +72,19 @@ export async function translateTextWithGoogleCloud(
   }
 
   const translateClient = getClient();
-  const [translated] = await translateClient.translate(safeText, {
-    to: normalizedTarget,
-    from: normalizedSource,
-  });
+  let translated: string | string[];
+
+  try {
+    [translated] = await translateClient.translate(safeText, {
+      to: normalizedTarget,
+      from: normalizedSource,
+    });
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `GOOGLE_TRANSLATE_CALL_FAILED(to=${normalizedTarget}, from=${normalizedSource ?? "auto"}): ${reason}`,
+    );
+  }
 
   if (Array.isArray(translated)) {
     return String(translated[0] ?? safeText).trim();

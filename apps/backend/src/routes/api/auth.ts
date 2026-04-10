@@ -125,7 +125,23 @@ router.post(
     if (!email || !password) {
       throw new ApiError(400, "Thiếu email hoặc password.");
     }
-    const authData = await loginUser({ email, password, deviceId });
+    let authData;
+    try {
+      authData = await loginUser({ email, password, deviceId });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+
+      if (code === "INVALID_CREDENTIALS") {
+        throw new ApiError(401, "Email hoặc mật khẩu không đúng.");
+      }
+
+      if (code === "ACCOUNT_LOCKED") {
+        throw new ApiError(403, "Tài khoản đã bị khóa.");
+      }
+
+      throw error;
+    }
+
     return res.status(200).json({
       message: "Đăng nhập thành công.",
       ...authData,
@@ -277,29 +293,8 @@ router.post(
         throw new ApiError(400, "Ngôn ngữ TTS chưa được hỗ trợ.");
       }
 
-      if (message === "PIPER_MODEL_NOT_CONFIGURED") {
-        throw new ApiError(500, "TTS chưa được cấu hình model giọng đọc.");
-      }
-
-      if (message === "PIPER_MODEL_FILE_NOT_FOUND") {
-        throw new ApiError(
-          500,
-          "Không tìm thấy file model Piper cho ngôn ngữ đã chọn.",
-        );
-      }
-
-      if (message === "PIPER_BIN_NOT_FOUND") {
-        throw new ApiError(
-          500,
-          "Không tìm thấy chương trình piper. Hãy cài Piper hoặc cấu hình PIPER_BIN đúng đường dẫn.",
-        );
-      }
-
-      if (
-        message.startsWith("PIPER_PROCESS_EXIT_") ||
-        message.startsWith("PIPER_EXECUTION_FAILED")
-      ) {
-        throw new ApiError(500, "TTS runtime lỗi khi sinh audio.");
+      if (message.startsWith("GOOGLE_TTS_") || message.startsWith("TTS_")) {
+        throw new ApiError(500, "Google TTS runtime lỗi khi sinh audio.");
       }
 
       throw new ApiError(500, "Không thể tạo audio test từ mô tả.");
@@ -323,7 +318,11 @@ router.post(
         message: "Làm mới phiên đăng nhập thành công.",
         ...refreshed,
       });
-    } catch {
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "UNKNOWN";
+      if (code === "ACCOUNT_LOCKED") {
+        throw new ApiError(403, "Tài khoản đã bị khóa.");
+      }
       throw new ApiError(401, "Refresh token khong hop le hoac da het han.");
     }
   }),

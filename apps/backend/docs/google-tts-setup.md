@@ -1,62 +1,86 @@
-# Google Cloud TTS Setup
+# Huong Dan Cau Hinh Google TTS (De Hieu, Chay Nhanh)
 
-This backend supports two TTS providers:
+Tai lieu nay dung cho backend trong thu muc apps/backend.
+He thong hien tai chi dung Google Cloud Text-to-Speech.
 
-- `piper` (default)
-- `google`
+## 1. Muc tieu
 
-Set provider in `.env`:
+- Cau hinh backend de sinh audio tu noi dung POI bang Google TTS.
+- Kiem tra cau hinh hop le truoc khi chay app.
+- Biet cach xu ly cac loi thuong gap.
 
-```env
-TTS_PROVIDER="google"
-```
+## 2. Chuan bi truoc
 
-## 1. Install dependency
+- Da cai dependencies backend.
+- Co tai khoan Google Cloud va da bat Text-to-Speech API.
+- Co service account co quyen dung TTS.
 
-```bash
-npm install
-```
+## 3. Cau hinh .env toi thieu
 
-## 2. Configure Google credentials
+Trong file .env, can it nhat cac bien sau:
 
-Use one method below.
+- TTS_PROVIDER="google"
+- TTS_SUPPORTED_LANGUAGES="vi,en,ko,ja,fr,de,es,pt,ru,zh,id,hi,ar,tr"
 
-### Method A: credential file path
+Ban chon 1 trong 2 cach cap credentials:
 
-```env
-GOOGLE_APPLICATION_CREDENTIALS="D:/path/to/service-account.json"
-```
+Cach A: Dung duong dan file key
 
-### Method B: inline credential JSON
+- GOOGLE_APPLICATION_CREDENTIALS="D:/path/to/service-account.json"
 
-```env
-GOOGLE_TTS_CREDENTIALS_JSON="{\"type\":\"service_account\",...}"
-```
+Cach B: Nhung JSON truc tiep vao env
 
-## 3. Optional voice map
+- GOOGLE_TTS_CREDENTIALS_JSON="{...json service account...}"
 
-```env
-GOOGLE_TTS_VOICE_MAP="{\"en\":\"en-US-Neural2-C\",\"vi\":\"vi-VN-Standard-A\"}"
-GOOGLE_TTS_SPEAKING_RATE=1
-GOOGLE_TTS_PITCH=0
-```
+Luu y:
 
-If `GOOGLE_TTS_VOICE_MAP` is empty, backend uses language defaults from `languageCode`.
+- Chi can 1 trong 2 cach la du.
+- Neu dat ca 2, backend uu tien credentials nhung truc tiep.
 
-## 4. Validate config
+## 4. Cau hinh tuy chon (nen biet)
 
-```bash
-npm run tts:validate
-```
+- GOOGLE_TTS_VOICE_MAP: map ngon ngu -> ten voice cu the.
+  Vi du: {"vi":"vi-VN-Wavenet-A","en":"en-US-Wavenet-D"}
+- GOOGLE_TTS_SPEAKING_RATE: toc do doc, mac dinh 1.
+- GOOGLE_TTS_PITCH: cao do giong doc, mac dinh 0.
+- TTS_LOCAL_AUDIO_DIR: thu muc luu file audio local.
+- TTS_PUBLIC_BASE_URL: duong dan public de frontend truy cap audio.
 
-## 5. Run backend
+Neu khong khai bao voice map, backend se tu chon theo language code.
 
-```bash
-npm run dev
-```
+## 5. Kiem tra cau hinh
 
-## Notes
+Chay lenh:
 
-- Audio files are still stored locally via existing `TTS_LOCAL_AUDIO_DIR`.
-- Queue mode (`bullmq` or `in-memory`) is unchanged.
-- Preview endpoint and POI generation both follow `TTS_PROVIDER`.
+- npm run tts:validate
+
+Neu cau hinh dung, script se bao hop le.
+
+## 6. Chay backend
+
+- npm run dev
+
+Hoac build truoc khi deploy:
+
+- npm run build
+
+## 7. Loi thuong gap va cach xu ly nhanh
+
+1. Loi thieu credentials
+
+- Kiem tra GOOGLE_APPLICATION_CREDENTIALS hoac GOOGLE_TTS_CREDENTIALS_JSON.
+
+2. Loi voice map khong hop le
+
+- Kiem tra GOOGLE_TTS_VOICE_MAP co dung dinh dang JSON object.
+
+3. Tao duoc POI nhung khong co audio
+
+- Kiem tra TTS_SUPPORTED_LANGUAGES co chua ngon ngu dang dung.
+- Kiem tra log backend khi goi tts-preview.
+
+## 8. Ghi chu van hanh
+
+- Queue mode van giu nguyen: co REDIS_URL thi dung BullMQ, khong co thi fallback in-memory.
+- Audio van luu local theo TTS_LOCAL_AUDIO_DIR.
+- Endpoint preview va luong tao audio POI deu dung cung runtime Google TTS.

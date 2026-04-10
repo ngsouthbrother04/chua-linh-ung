@@ -1,10 +1,9 @@
-import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 import {
   ArrowUpRight,
   BarChart3,
   Bell,
-  CalendarClock,
   CheckCircle2,
   Clock3,
   FileText,
@@ -13,14 +12,13 @@ import {
   LayoutDashboard,
   Layers3,
   MapPinned,
-  Megaphone,
-  MoreHorizontal,
   Search,
   Settings2,
   ShieldCheck,
   Sparkles,
   UtensilsCrossed,
 } from "lucide-react";
+import { getRoleFromToken } from "../lib/jwt";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL?.trim() || "http://localhost:3000";
@@ -28,88 +26,15 @@ const API_BASE_URL =
 const statCards = [
   {
     key: "totalPois",
-    title: "Total POIs",
+    title: "Tổng số POI",
     icon: MapPinned,
     gradient: "from-orange-500 to-rose-500",
   },
   {
     key: "publishedPois",
-    title: "Published POIs",
+    title: "POI đã xuất bản",
     icon: ShieldCheck,
     gradient: "from-emerald-500 to-teal-500",
-  },
-  {
-    key: "needsAudioPois",
-    title: "Needs audio",
-    icon: Megaphone,
-    gradient: "from-amber-500 to-orange-500",
-  },
-  {
-    key: "syncVersion",
-    title: "Sync version",
-    icon: Layers3,
-    gradient: "from-sky-500 to-cyan-500",
-  },
-];
-
-const pipelineCards = [
-  {
-    key: "contentReview",
-    label: "Content review",
-  },
-  {
-    key: "audioGeneration",
-    label: "Audio generation",
-  },
-  {
-    key: "imageUploads",
-    label: "Image uploads",
-  },
-];
-
-const healthChecks = [
-  {
-    key: "backendApi",
-    label: "Backend API",
-    icon: Gauge,
-  },
-  {
-    key: "adminAuth",
-    label: "Admin auth",
-    icon: ShieldCheck,
-  },
-  {
-    key: "ttsQueue",
-    label: "TTS queue",
-    icon: Megaphone,
-  },
-  {
-    key: "syncManifest",
-    label: "Sync manifest",
-    icon: ImagePlus,
-  },
-];
-
-const shortcuts = [
-  {
-    title: "Create POI",
-    description: "Add a new narration point with multilingual text.",
-    icon: MapPinned,
-  },
-  {
-    title: "Publish tour",
-    description: "Push a curated route to the live map.",
-    icon: Layers3,
-  },
-  {
-    title: "Generate audio",
-    description: "Queue TTS generation for the latest content.",
-    icon: Megaphone,
-  },
-  {
-    title: "View reports",
-    description: "Inspect analytics, sync health, and exports.",
-    icon: FileText,
   },
 ];
 
@@ -127,14 +52,14 @@ function getPartnerRegistrationTone(status) {
 
 function getPartnerRegistrationLabel(status) {
   if (status === "APPROVED") {
-    return "Approved";
+    return "Đã duyệt";
   }
 
   if (status === "REJECTED") {
-    return "Rejected";
+    return "Đã từ chối";
   }
 
-  return "Pending";
+  return "Chờ xử lý";
 }
 
 function DashboardMetric({ title, value, delta, icon, gradient }) {
@@ -262,17 +187,17 @@ function hasAudioUrls(audioUrls) {
 
 function formatRelativeTime(value) {
   if (!value) {
-    return "Unknown";
+    return "Không rõ";
   }
 
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) {
-    return "Unknown";
+    return "Không rõ";
   }
 
   const diffMs = Date.now() - date.getTime();
   if (diffMs < 60_000) {
-    return "just now";
+    return "vừa xong";
   }
 
   const diffMinutes = Math.floor(diffMs / 60_000);
@@ -307,29 +232,45 @@ function getPoiStatusTone(poi) {
 
 function getPoiStatusLabel(poi) {
   if (!poi.isPublished) {
-    return "Draft";
+    return "Bản nháp";
   }
 
   if (!hasAudioUrls(poi.audioUrls)) {
-    return "Needs audio";
+    return "Cần tạo audio";
   }
 
-  return "Published";
+  return "Đã xuất bản";
 }
 
 export default function AdminDashboard() {
+  const sidebarMenus = [
+    { key: "overview", label: "Tổng quan", icon: LayoutDashboard },
+    { key: "pois", label: "POI", icon: FileText },
+    { key: "partners", label: "Đối tác", icon: Layers3 },
+    { key: "users", label: "Người dùng", icon: ShieldCheck },
+    { key: "analytics", label: "Thống kê", icon: BarChart3 },
+    { key: "settings", label: "Cài đặt", icon: Settings2 },
+  ];
+
   const [adminPois, setAdminPois] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [partnerRegistrationRequests, setPartnerRegistrationRequests] =
     useState([]);
-  const [ttsQueueStatus, setTtsQueueStatus] = useState(null);
-  const [ttsValidation, setTtsValidation] = useState(null);
-  const [syncManifest, setSyncManifest] = useState(null);
-  const [analyticsStats, setAnalyticsStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpdatingUserRoleId, setIsUpdatingUserRoleId] = useState("");
+  const [isUpdatingUserAccessId, setIsUpdatingUserAccessId] = useState("");
   const [loadError, setLoadError] = useState("");
   const [reloadTick, setReloadTick] = useState(0);
+  const [userSearchText, setUserSearchText] = useState("");
+  const [userRoleFilter, setUserRoleFilter] = useState("ALL");
+  const [userPage, setUserPage] = useState(1);
+  const [userPageSize, setUserPageSize] = useState(10);
+  const [poiTypeFilter, setPoiTypeFilter] = useState("ALL");
+  const [pendingUserAction, setPendingUserAction] = useState(null);
+  const [activeSection, setActiveSection] = useState("overview");
 
   const storedToken = getStoredToken();
+  const userRole = storedToken ? getRoleFromToken(storedToken) : "USER";
 
   useEffect(() => {
     let cancelled = false;
@@ -349,15 +290,10 @@ export default function AdminDashboard() {
       }
 
       const adminHeaders = { Authorization: `Bearer ${storedToken}` };
-      const bearerHeaders = { Authorization: `Bearer ${storedToken}` };
-
       const adminRequests = await Promise.allSettled([
         fetchJson("/api/v1/admin/pois", { headers: adminHeaders }),
+        fetchJson("/api/v1/admin/users", { headers: adminHeaders }),
         fetchJson("/api/v1/admin/partner-registration-requests", {
-          headers: adminHeaders,
-        }),
-        fetchJson("/api/v1/admin/tts/queue/status", { headers: adminHeaders }),
-        fetchJson("/api/v1/admin/tts/config/validate", {
           headers: adminHeaders,
         }),
       ]);
@@ -372,39 +308,19 @@ export default function AdminDashboard() {
       }
 
       if (adminRequests[1].status === "fulfilled") {
-        setPartnerRegistrationRequests(adminRequests[1].value.items ?? []);
+        setAdminUsers(adminRequests[1].value.items ?? []);
       } else {
-        setPartnerRegistrationRequests([]);
-        errors.push(
-          `Partner registrations: ${adminRequests[1].reason.message}`,
-        );
+        setAdminUsers([]);
+        errors.push(`Users: ${adminRequests[1].reason.message}`);
       }
 
       if (adminRequests[2].status === "fulfilled") {
-        setTtsQueueStatus(adminRequests[2].value);
+        setPartnerRegistrationRequests(adminRequests[2].value.items ?? []);
       } else {
-        setTtsQueueStatus(null);
-        errors.push(`TTS queue: ${adminRequests[2].reason.message}`);
-      }
-
-      if (adminRequests[3].status === "fulfilled") {
-        setTtsValidation(adminRequests[3].value);
-      } else {
-        setTtsValidation(null);
-        errors.push(`TTS config: ${adminRequests[3].reason.message}`);
-      }
-
-      setSyncManifest(null);
-
-      const analyticsResult = await Promise.allSettled([
-        fetchJson("/api/v1/analytics/stats", { headers: bearerHeaders }),
-      ]);
-
-      if (analyticsResult[0].status === "fulfilled") {
-        setAnalyticsStats(analyticsResult[0].value.data ?? null);
-      } else {
-        setAnalyticsStats(null);
-        errors.push(`Analytics: ${analyticsResult[0].reason.message}`);
+        setPartnerRegistrationRequests([]);
+        errors.push(
+          `Partner registrations: ${adminRequests[2].reason.message}`,
+        );
       }
 
       if (!cancelled) {
@@ -459,34 +375,114 @@ export default function AdminDashboard() {
     }
   };
 
+  const executeUpdateUserRole = async (targetUserId, targetRole) => {
+    try {
+      setIsUpdatingUserRoleId(targetUserId);
+
+      if (targetRole === "USER") {
+        await fetchJson(`/api/v1/admin/users/${targetUserId}/role/revoke`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+          },
+        });
+      } else {
+        await fetchJson(`/api/v1/admin/users/${targetUserId}/role`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            role: targetRole,
+          }),
+        });
+      }
+
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật quyền người dùng.",
+      );
+    } finally {
+      setIsUpdatingUserRoleId("");
+    }
+  };
+
+  const executeUpdateUserAccess = async (targetUserId, shouldLock) => {
+    try {
+      setIsUpdatingUserAccessId(targetUserId);
+
+      await fetchJson(
+        `/api/v1/admin/users/${targetUserId}/${shouldLock ? "lock" : "unlock"}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+          },
+        },
+      );
+
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật trạng thái khóa tài khoản.",
+      );
+    } finally {
+      setIsUpdatingUserAccessId("");
+    }
+  };
+
+  const requestUpdateUserRole = (targetUserId, targetRole) => {
+    setPendingUserAction({
+      type: "role",
+      targetUserId,
+      targetRole,
+    });
+  };
+
+  const requestUpdateUserAccess = (targetUserId, shouldLock) => {
+    setPendingUserAction({
+      type: "access",
+      targetUserId,
+      shouldLock,
+    });
+  };
+
+  const handleConfirmUserAction = async () => {
+    if (!pendingUserAction) {
+      return;
+    }
+
+    if (pendingUserAction.type === "role") {
+      await executeUpdateUserRole(
+        pendingUserAction.targetUserId,
+        pendingUserAction.targetRole,
+      );
+      setPendingUserAction(null);
+      return;
+    }
+
+    await executeUpdateUserAccess(
+      pendingUserAction.targetUserId,
+      pendingUserAction.shouldLock,
+    );
+    setPendingUserAction(null);
+  };
+
   const totalPois = adminPois.length;
   const publishedPois = adminPois.filter((poi) => poi.isPublished).length;
-  const imageReadyPois = adminPois.filter((poi) => Boolean(poi.image)).length;
-  const audioReadyPois = adminPois.filter((poi) =>
-    hasAudioUrls(poi.audioUrls),
-  ).length;
-  const needsAudioPois = totalPois - audioReadyPois;
-  const syncVersion =
-    syncManifest?.contentVersion ??
-    adminPois.reduce(
-      (highestVersion, poi) =>
-        Math.max(highestVersion, Number(poi.contentVersion ?? 0)),
-      0,
-    );
-  const totalTours = syncManifest?.totalTours ?? 0;
-  const queueWaiting = ttsQueueStatus?.waiting ?? 0;
-  const queueActive = ttsQueueStatus?.active ?? 0;
-  const queueMode = ttsQueueStatus?.mode ?? "unknown";
-  const queueTotal = queueWaiting + queueActive;
-  const ttsWarnings = ttsValidation?.warnings?.length ?? 0;
-  const ttsErrors = ttsValidation?.errors?.length ?? 0;
 
   const dashboardStats = statCards.map((card) => {
     if (card.key === "totalPois") {
       return {
         ...card,
         value: formatNumber(totalPois),
-        delta: `${formatNumber(totalTours)} tours in manifest`,
+        delta: `${formatNumber(publishedPois)} POI đã xuất bản`,
       };
     }
 
@@ -495,112 +491,199 @@ export default function AdminDashboard() {
         ...card,
         value: formatNumber(publishedPois),
         delta: totalPois
-          ? `${Math.round((publishedPois / totalPois) * 100)}% of content published`
-          : "No POIs loaded yet",
+          ? `${Math.round((publishedPois / totalPois) * 100)}% nội dung đã xuất bản`
+          : "Chưa có POI",
       };
     }
 
-    if (card.key === "needsAudioPois") {
-      return {
-        ...card,
-        value: formatNumber(needsAudioPois),
-        delta: totalPois
-          ? `${formatNumber(audioReadyPois)} items already have audio`
-          : "No POIs loaded yet",
-      };
-    }
-
-    return {
-      ...card,
-      value: syncVersion ? `v${syncVersion}` : "N/A",
-      delta: syncManifest?.lastUpdatedAt
-        ? `Updated ${formatRelativeTime(syncManifest.lastUpdatedAt)}`
-        : "Sync manifest not loaded",
-    };
+    return card;
   });
 
-  const pipelineItems = pipelineCards.map((card) => {
-    if (card.key === "contentReview") {
-      return {
-        ...card,
-        progress: totalPois ? Math.round((publishedPois / totalPois) * 100) : 0,
-        note: `${formatNumber(totalPois - publishedPois)} POIs waiting for moderation`,
-      };
-    }
+  const allPoiRows = useMemo(
+    () =>
+      adminPois.map((poi) => ({
+        id: poi.id,
+        type: poi.type || "POI",
+        name: pickLocalizedText(poi.name) || "POI chưa đặt tên",
+        version: `v${poi.contentVersion ?? 1}`,
+        status: getPoiStatusLabel(poi),
+        updated: formatRelativeTime(poi.updatedAt),
+        tone: getPoiStatusTone(poi),
+        creatorId: poi.creatorId || "",
+      })),
+    [adminPois],
+  );
 
-    if (card.key === "audioGeneration") {
-      return {
-        ...card,
-        progress: totalPois
-          ? Math.round((audioReadyPois / totalPois) * 100)
-          : 0,
-        note: `${formatNumber(needsAudioPois)} POIs still need audio`,
-      };
-    }
+  const poiTypeOptions = useMemo(
+    () =>
+      Array.from(new Set(allPoiRows.map((poi) => poi.type)))
+        .filter(Boolean)
+        .sort(),
+    [allPoiRows],
+  );
 
-    return {
-      ...card,
-      progress: totalPois ? Math.round((imageReadyPois / totalPois) * 100) : 0,
-      note: `${formatNumber(imageReadyPois)}/${formatNumber(totalPois)} POIs have images`,
-    };
-  });
+  const filteredPoiRows = useMemo(
+    () =>
+      poiTypeFilter === "ALL"
+        ? allPoiRows
+        : allPoiRows.filter((poi) => poi.type === poiTypeFilter),
+    [allPoiRows, poiTypeFilter],
+  );
 
-  const systemChecks = healthChecks.map((item) => {
-    if (item.key === "backendApi") {
-      return {
-        ...item,
-        status: API_BASE_URL,
-        subtitle: "Backend base URL",
-        tone: "emerald",
-      };
-    }
-
-    if (item.key === "adminAuth") {
-      return {
-        ...item,
-        status: storedToken ? "Token found" : "Not signed in",
-        subtitle: storedToken
-          ? "Using bearer auth for admin endpoints"
-          : "Sign in with ADMIN account",
-        tone: storedToken ? "emerald" : "rose",
-      };
-    }
-
-    if (item.key === "ttsQueue") {
-      return {
-        ...item,
-        status: ttsQueueStatus
-          ? `${queueMode} / ${queueTotal} jobs`
-          : "Unavailable",
-        subtitle: ttsValidation
-          ? `${ttsWarnings} warnings, ${ttsErrors} errors`
-          : "TTS config not loaded",
-        tone: ttsQueueStatus ? "amber" : "slate",
-      };
-    }
-
-    return {
-      ...item,
-      status: syncManifest ? `v${syncManifest.contentVersion}` : "Unavailable",
-      subtitle: syncManifest
-        ? `${formatNumber(syncManifest.totalPois)} POIs • ${formatNumber(syncManifest.totalTours)} tours`
-        : "Sync manifest endpoint is USER-only",
-      tone: syncManifest ? "emerald" : "slate",
-    };
-  });
-
-  const queueRows = adminPois.slice(0, 6).map((poi) => ({
-    type: poi.type || "POI",
-    name: pickLocalizedText(poi.name) || "Untitled POI",
-    version: `v${poi.contentVersion ?? 1}`,
-    status: getPoiStatusLabel(poi),
-    updated: formatRelativeTime(poi.updatedAt),
-    tone: getPoiStatusTone(poi),
-  }));
+  const queueRows = filteredPoiRows.slice(0, 6);
 
   const latestUpdatedLabel = adminPois[0]?.updatedAt
     ? formatRelativeTime(adminPois[0].updatedAt)
-    : "No POIs loaded";
+    : "Chưa có POI";
+
+  const normalizedAdminUsers = useMemo(
+    () =>
+      adminUsers.map((item) => ({
+        id: item.id,
+        email: String(item.email || ""),
+        fullName: String(item.fullName || ""),
+        role: String(item.role || "USER").toUpperCase(),
+        isActive: Boolean(item.isActive),
+        createdAt: item.createdAt,
+      })),
+    [adminUsers],
+  );
+
+  const confirmDialogContent = useMemo(() => {
+    if (!pendingUserAction) {
+      return null;
+    }
+
+    const selectedUser = normalizedAdminUsers.find(
+      (user) => user.id === pendingUserAction.targetUserId,
+    );
+    const label =
+      selectedUser?.fullName || selectedUser?.email || "tài khoản này";
+
+    if (pendingUserAction.type === "role") {
+      return {
+        title: "Xác nhận cập nhật vai trò",
+        message: `Bạn có chắc muốn đổi vai trò của ${label} sang ${pendingUserAction.targetRole}?`,
+        confirmText: "Xác nhận đổi vai trò",
+      };
+    }
+
+    if (pendingUserAction.shouldLock) {
+      return {
+        title: "Xác nhận khóa tài khoản",
+        message: `Bạn có chắc muốn khóa ${label}? Tài khoản này sẽ không thể đăng nhập cho đến khi được mở khóa.`,
+        confirmText: "Xác nhận khóa",
+      };
+    }
+
+    return {
+      title: "Xác nhận mở khóa tài khoản",
+      message: `Bạn có chắc muốn mở khóa ${label}?`,
+      confirmText: "Xác nhận mở khóa",
+    };
+  }, [normalizedAdminUsers, pendingUserAction]);
+
+  const isConfirmingAction = Boolean(
+    isUpdatingUserRoleId || isUpdatingUserAccessId,
+  );
+
+  const filteredAdminUsers = useMemo(() => {
+    const keyword = userSearchText.trim().toLowerCase();
+
+    return normalizedAdminUsers.filter((user) => {
+      const roleOk = userRoleFilter === "ALL" || user.role === userRoleFilter;
+      if (!roleOk) return false;
+
+      if (!keyword) return true;
+
+      const haystack =
+        `${user.fullName} ${user.email} ${user.role}`.toLowerCase();
+      return haystack.includes(keyword);
+    });
+  }, [normalizedAdminUsers, userRoleFilter, userSearchText]);
+
+  const totalUserPages = Math.max(
+    1,
+    Math.ceil(filteredAdminUsers.length / userPageSize),
+  );
+
+  const pagedAdminUsers = useMemo(() => {
+    const safePage = Math.min(userPage, totalUserPages);
+    const start = (safePage - 1) * userPageSize;
+    return filteredAdminUsers.slice(start, start + userPageSize);
+  }, [filteredAdminUsers, userPage, userPageSize, totalUserPages]);
+
+  useEffect(() => {
+    setUserPage(1);
+  }, [userRoleFilter, userSearchText, userPageSize]);
+
+  useEffect(() => {
+    if (userPage > totalUserPages) {
+      setUserPage(totalUserPages);
+    }
+  }, [userPage, totalUserPages]);
+
+  const userRoleStats = {
+    ALL: normalizedAdminUsers.length,
+    ADMIN: normalizedAdminUsers.filter((user) => user.role === "ADMIN").length,
+    PARTNER: normalizedAdminUsers.filter((user) => user.role === "PARTNER")
+      .length,
+    USER: normalizedAdminUsers.filter((user) => user.role === "USER").length,
+    LOCKED: normalizedAdminUsers.filter((user) => !user.isActive).length,
+  };
+
+  const roleToneMap = {
+    ADMIN: "rose",
+    PARTNER: "emerald",
+    USER: "slate",
+  };
+
+  const userLookupById = useMemo(
+    () =>
+      normalizedAdminUsers.reduce((acc, user) => {
+        acc[user.id] = {
+          fullName: user.fullName || "Chưa cập nhật tên",
+          email: user.email || "Không có email",
+          role: user.role,
+        };
+        return acc;
+      }, {}),
+    [normalizedAdminUsers],
+  );
+
+  const poiByTypeStats = useMemo(() => {
+    const counter = {};
+    for (const poi of allPoiRows) {
+      counter[poi.type] = (counter[poi.type] || 0) + 1;
+    }
+
+    return Object.entries(counter)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [allPoiRows]);
+
+  const partnerPoiStats = useMemo(() => {
+    const counter = {};
+
+    for (const poi of allPoiRows) {
+      if (!poi.creatorId) continue;
+      counter[poi.creatorId] = (counter[poi.creatorId] || 0) + 1;
+    }
+
+    return Object.entries(counter)
+      .map(([creatorId, totalPois]) => {
+        const creator = userLookupById[creatorId] || {};
+        return {
+          creatorId,
+          totalPois,
+          fullName: creator.fullName || creatorId,
+          email: creator.email || "Không rõ email",
+          role: creator.role || "UNKNOWN",
+        };
+      })
+      .sort((a, b) => b.totalPois - a.totalPois)
+      .slice(0, 10);
+  }, [allPoiRows, userLookupById]);
   const partnerRegistrationRows = partnerRegistrationRequests
     .slice(0, 8)
     .map((item) => ({
@@ -616,6 +699,11 @@ export default function AdminDashboard() {
       tone: getPartnerRegistrationTone(item.status),
       label: getPartnerRegistrationLabel(item.status),
     }));
+
+  // Protect this page - only ADMIN users can access
+  if (userRole !== "ADMIN") {
+    return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="relative min-h-full overflow-hidden bg-slate-950 text-white">
@@ -633,7 +721,7 @@ export default function AdminDashboard() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-[0.3em] text-white/45">
-                  Admin console
+                  Quản trị hệ thống
                 </p>
                 <h2 className="text-xl font-black text-white">Phố Ẩm Thực</h2>
               </div>
@@ -643,16 +731,14 @@ export default function AdminDashboard() {
               <div className="flex items-center justify-between rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-100">
                 <span className="inline-flex items-center gap-2 font-semibold">
                   <CheckCircle2 size={16} />
-                  Backend connected
+                  Backend đã kết nối
                 </span>
-                <span>
-                  {syncManifest ? `v${syncManifest.contentVersion}` : "Live"}
-                </span>
+                <span>Đang chạy</span>
               </div>
               <div className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/6 px-4 py-3 text-sm text-white/70">
                 <span className="inline-flex items-center gap-2 font-semibold">
                   <Clock3 size={16} />
-                  Last loaded
+                  Lần tải gần nhất
                 </span>
                 <span>{latestUpdatedLabel}</span>
               </div>
@@ -660,21 +746,16 @@ export default function AdminDashboard() {
           </div>
 
           <nav className="rounded-[30px] border border-white/10 bg-white/6 p-3 shadow-[0_20px_60px_rgba(2,6,23,0.24)]">
-            {[
-              { label: "Overview", icon: LayoutDashboard, active: true },
-              { label: "Content queue", icon: FileText },
-              { label: "Media library", icon: ImagePlus },
-              { label: "Sync versioning", icon: Layers3 },
-              { label: "Analytics", icon: BarChart3 },
-              { label: "Settings", icon: Settings2 },
-            ].map((item) => {
+            {sidebarMenus.map((item) => {
               const Icon = item.icon;
+              const isActive = activeSection === item.key;
               return (
                 <button
-                  key={item.label}
+                  key={item.key}
                   type="button"
+                  onClick={() => setActiveSection(item.key)}
                   className={`mb-2 flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-semibold transition last:mb-0 ${
-                    item.active
+                    isActive
                       ? "bg-linear-to-r from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-500/20"
                       : "text-white/65 hover:bg-white/8 hover:text-white"
                   }`}
@@ -685,36 +766,6 @@ export default function AdminDashboard() {
               );
             })}
           </nav>
-
-          <div className="rounded-[30px] border border-white/10 bg-white/6 p-5 shadow-[0_20px_60px_rgba(2,6,23,0.24)]">
-            <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-              Quick health
-            </p>
-            <div className="mt-4 space-y-3">
-              {systemChecks.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <div
-                    key={item.label}
-                    className="flex items-center justify-between rounded-2xl border border-white/8 bg-black/10 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/8 text-orange-300">
-                        <Icon size={16} />
-                      </div>
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          {item.label}
-                        </p>
-                        <p className="text-xs text-white/45">{item.subtitle}</p>
-                      </div>
-                    </div>
-                    <StatusPill tone={item.tone}>{item.status}</StatusPill>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
         </aside>
 
         <main className="flex-1 overflow-y-auto px-4 py-4 md:px-6 xl:px-8 xl:py-6">
@@ -723,14 +774,14 @@ export default function AdminDashboard() {
               <div className="max-w-3xl">
                 <p className="inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-400/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-orange-100">
                   <Sparkles size={12} />
-                  Admin dashboard
+                  Bảng điều khiển admin
                 </p>
                 <h1 className="mt-4 text-4xl font-black tracking-tight text-white md:text-5xl">
-                  Command center for POIs, tours, and audio operations.
+                  Trung tâm điều hành POI, tour và audio.
                 </h1>
                 <p className="mt-4 max-w-2xl text-base leading-relaxed text-white/65 md:text-lg">
-                  Monitor publishing, manage content, check sync health, and
-                  keep narration assets ready for the map experience.
+                  Theo dõi xuất bản, quản lý nội dung, kiểm tra đồng bộ và giữ
+                  tài nguyên thuyết minh luôn sẵn sàng.
                 </p>
               </div>
 
@@ -739,7 +790,7 @@ export default function AdminDashboard() {
                   to="/"
                   className="inline-flex items-center gap-2 rounded-2xl border border-white/12 bg-white/8 px-4 py-3 text-sm font-semibold text-white/80 transition hover:bg-white/12"
                 >
-                  Open map
+                  Mở bản đồ
                 </Link>
                 <button
                   type="button"
@@ -747,7 +798,7 @@ export default function AdminDashboard() {
                   className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-orange-500 to-rose-500 px-4 py-3 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition hover:brightness-105"
                 >
                   <ArrowUpRight size={16} />
-                  Refresh data
+                  Làm mới dữ liệu
                 </button>
               </div>
             </div>
@@ -760,7 +811,7 @@ export default function AdminDashboard() {
                 />
                 <input
                   type="search"
-                  placeholder="Search POIs, tours, users, or content versions"
+                  placeholder="Tìm POI, tour, người dùng hoặc phiên bản nội dung"
                   className="w-full rounded-2xl border border-white/10 bg-slate-950/55 py-3.5 pl-11 pr-4 text-sm text-white placeholder:text-white/35 outline-none ring-0 transition focus:border-orange-300/40 focus:bg-slate-950/75"
                 />
               </div>
@@ -768,13 +819,13 @@ export default function AdminDashboard() {
                 type="button"
                 className="rounded-2xl border border-white/10 bg-white/7 px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/12"
               >
-                {isLoading ? "Loading" : "Filters"}
+                {isLoading ? "Đang tải" : "Bộ lọc"}
               </button>
               <button
                 type="button"
                 className="rounded-2xl border border-white/10 bg-white/7 px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/12"
               >
-                Export
+                Xuất dữ liệu
               </button>
             </div>
           </section>
@@ -783,7 +834,7 @@ export default function AdminDashboard() {
             <section className="mt-6 rounded-[28px] border border-rose-400/20 bg-rose-400/10 p-4 text-sm text-rose-100 backdrop-blur-xl">
               <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                 <div>
-                  <p className="font-semibold">Backend data warning</p>
+                  <p className="font-semibold">Cảnh báo dữ liệu backend</p>
                   <p className="mt-1 text-rose-100/80">{loadError}</p>
                 </div>
                 <button
@@ -791,421 +842,621 @@ export default function AdminDashboard() {
                   onClick={() => setReloadTick((tick) => tick + 1)}
                   className="inline-flex items-center gap-2 rounded-2xl border border-rose-300/20 bg-rose-300/10 px-4 py-2 font-semibold text-rose-100 transition hover:bg-rose-300/15"
                 >
-                  Retry
+                  Thử lại
                 </button>
               </div>
             </section>
           )}
 
-          <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {dashboardStats.map((item) => (
-              <DashboardMetric key={item.title} {...item} />
-            ))}
-          </section>
+          {activeSection === "overview" && (
+            <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              {dashboardStats.map((item) => (
+                <DashboardMetric key={item.title} {...item} />
+              ))}
+            </section>
+          )}
 
-          <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-                  Partner onboarding
-                </p>
-                <h2 className="mt-2 text-2xl font-black text-white">
-                  Registration requests
-                </h2>
-              </div>
-              <StatusPill
-                tone={partnerRegistrationRows.length ? "amber" : "slate"}
-              >
-                {formatNumber(partnerRegistrationRows.length)} queued
-              </StatusPill>
-            </div>
-
-            {partnerRegistrationRows.length === 0 ? (
-              <div className="mt-5 rounded-[28px] border border-white/8 bg-black/10 p-4 text-sm text-white/60">
-                No partner registration requests available.
-              </div>
-            ) : (
-              <div className="mt-5 grid gap-3">
-                {partnerRegistrationRows.map((item) => {
-                  const isPending = item.status === "PENDING";
-                  return (
-                    <div
-                      key={item.id}
-                      className="rounded-[28px] border border-white/8 bg-black/10 p-4"
-                    >
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <p className="text-sm font-semibold text-white">
-                              {item.shopName || "Untitled request"}
-                            </p>
-                            <StatusPill tone={item.tone}>
-                              {item.label}
-                            </StatusPill>
-                          </div>
-                          <p className="mt-1 text-sm text-white/60">
-                            {item.shopAddress}
-                          </p>
-                          <p className="mt-2 text-xs text-white/45">
-                            Requested by: {item.requester} •{" "}
-                            {formatRelativeTime(item.createdAt)}
-                          </p>
-                          {item.note && (
-                            <p className="mt-2 text-sm text-white/70">
-                              Note: {item.note}
-                            </p>
-                          )}
-                          {item.decisionNote && (
-                            <p className="mt-2 text-sm text-white/70">
-                              Decision: {item.decisionNote}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap gap-2 lg:justify-end">
-                          {isPending ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleReviewPartnerRegistrationRequest(
-                                    item.id,
-                                    "approve",
-                                  )
-                                }
-                                className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105"
-                              >
-                                Approve
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleReviewPartnerRegistrationRequest(
-                                    item.id,
-                                    "reject",
-                                  )
-                                }
-                                className="inline-flex items-center gap-2 rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/15"
-                              >
-                                Reject
-                              </button>
-                            </>
-                          ) : (
-                            <span className="inline-flex items-center rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-semibold text-white/70">
-                              Reviewed{" "}
-                              {item.reviewedAt
-                                ? formatRelativeTime(item.reviewedAt)
-                                : ""}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-
-          <section className="mt-6 grid gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-            <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-                    Publishing pipeline
-                  </p>
-                  <h2 className="mt-2 text-2xl font-black text-white">
-                    Operational flow
-                  </h2>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-3 py-1 text-xs font-semibold text-emerald-100">
-                  <CheckCircle2 size={13} />
-                  Stable
-                </div>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                {pipelineItems.map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded-[26px] border border-white/8 bg-black/10 p-4"
-                  >
-                    <div className="flex items-center justify-between gap-4">
-                      <div>
-                        <p className="text-sm font-semibold text-white">
-                          {item.label}
-                        </p>
-                        <p className="mt-1 text-sm text-white/50">
-                          {item.note}
-                        </p>
-                      </div>
-                      <span className="text-sm font-bold text-white">
-                        {item.progress}%
-                      </span>
-                    </div>
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/8">
-                      <div
-                        className="h-full rounded-full bg-linear-to-r from-orange-500 to-rose-500"
-                        style={{ width: `${item.progress}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2">
-                <div className="rounded-[26px] border border-white/8 bg-black/10 p-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm font-semibold text-white">
-                      Queue throughput
+          {(activeSection === "overview" || activeSection === "analytics") && (
+            <section className="mt-6 grid gap-6 xl:grid-cols-2">
+              <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                      Thống kê POI
                     </p>
-                    <span className="text-xs text-emerald-300">+18%</span>
+                    <h2 className="mt-2 text-2xl font-black text-white">
+                      POI theo loại
+                    </h2>
                   </div>
-                  <div className="mt-4 flex items-end gap-2">
-                    {[38, 52, 46, 61, 58, 74, 88].map((value, index) => (
-                      <div key={value} className="flex-1">
-                        <div
-                          className="rounded-t-2xl bg-linear-to-t from-orange-500 to-amber-300"
-                          style={{
-                            height: `${value}px`,
-                            opacity: 0.55 + index * 0.06,
-                          }}
-                        />
+                  <StatusPill
+                    tone={poiByTypeStats.length ? "emerald" : "slate"}
+                  >
+                    {formatNumber(poiByTypeStats.length)} loại
+                  </StatusPill>
+                </div>
+
+                {poiByTypeStats.length === 0 ? (
+                  <div className="mt-5 rounded-3xl border border-white/8 bg-black/10 p-4 text-sm text-white/60">
+                    Chưa có dữ liệu POI để thống kê.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {poiByTypeStats.map((item) => (
+                      <div
+                        key={item.type}
+                        className="flex items-center justify-between rounded-2xl border border-white/8 bg-black/10 px-4 py-3"
+                      >
+                        <span className="text-sm font-semibold text-white">
+                          {item.type}
+                        </span>
+                        <span className="text-sm font-bold text-orange-200">
+                          {formatNumber(item.count)} POI
+                        </span>
                       </div>
                     ))}
                   </div>
-                </div>
-                <div className="rounded-[26px] border border-white/8 bg-black/10 p-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-white">
-                    <CalendarClock size={16} className="text-orange-300" />
-                    Today’s schedule
-                  </div>
-                  <div className="mt-4 space-y-3 text-sm text-white/70">
-                    <div className="flex items-center justify-between rounded-2xl bg-white/6 px-3 py-2">
-                      <span>10:00 Content review</span>
-                      <span className="text-white/45">30m</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-2xl bg-white/6 px-3 py-2">
-                      <span>13:30 TTS batch publish</span>
-                      <span className="text-white/45">45m</span>
-                    </div>
-                    <div className="flex items-center justify-between rounded-2xl bg-white/6 px-3 py-2">
-                      <span>16:00 Analytics sync</span>
-                      <span className="text-white/45">20m</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="grid gap-6">
-              <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-                      Quick actions
-                    </p>
-                    <h2 className="mt-2 text-2xl font-black text-white">
-                      Shortcuts
-                    </h2>
-                  </div>
-                  <MoreHorizontal className="text-white/45" size={18} />
-                </div>
-
-                <div className="mt-5 grid gap-3">
-                  {shortcuts.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <button
-                        key={item.title}
-                        type="button"
-                        className="group flex items-start gap-4 rounded-[26px] border border-white/8 bg-black/10 p-4 text-left transition hover:border-orange-300/30 hover:bg-white/8"
-                      >
-                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-linear-to-br from-orange-500 to-rose-500 text-white shadow-lg shadow-orange-500/20">
-                          <Icon size={18} />
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-4">
-                            <p className="text-sm font-semibold text-white">
-                              {item.title}
-                            </p>
-                            <ArrowUpRight
-                              className="text-white/35 transition group-hover:text-orange-200"
-                              size={16}
-                            />
-                          </div>
-                          <p className="mt-1 text-sm leading-relaxed text-white/55">
-                            {item.description}
-                          </p>
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-                <div className="flex items-center justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-                      System snapshot
-                    </p>
-                    <h2 className="mt-2 text-2xl font-black text-white">
-                      Live health
-                    </h2>
-                  </div>
-                  <Bell className="text-orange-300" size={18} />
-                </div>
-
-                <div className="mt-5 space-y-3">
-                  {systemChecks.map((item) => {
-                    const Icon = item.icon;
-                    return (
-                      <div
-                        key={item.label}
-                        className="flex items-center justify-between rounded-3xl border border-white/8 bg-black/10 px-4 py-3"
-                      >
-                        <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/8 text-orange-300">
-                            <Icon size={16} />
-                          </div>
-                          <div>
-                            <p className="text-sm font-semibold text-white">
-                              {item.label}
-                            </p>
-                            <p className="text-xs text-white/45">
-                              {item.subtitle}
-                            </p>
-                          </div>
-                        </div>
-                        <StatusPill tone={item.tone}>{item.status}</StatusPill>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5 rounded-[26px] border border-white/8 bg-black/10 p-4">
-                  <div className="flex items-center justify-between gap-4">
-                    <div>
-                      <p className="text-sm font-semibold text-white">
-                        Usage pulse
-                      </p>
-                      <p className="mt-1 text-xs text-white/45">
-                        {analyticsStats
-                          ? "Live analytics from backend"
-                          : "Bearer token required"}
-                      </p>
-                    </div>
-                    <BarChart3 className="text-orange-300" size={18} />
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                    <div className="rounded-2xl bg-white/6 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                        Plays
-                      </p>
-                      <p className="mt-1 text-xl font-black text-white">
-                        {analyticsStats
-                          ? formatNumber(analyticsStats.plays ?? 0)
-                          : "—"}
-                      </p>
-                    </div>
-                    <div className="rounded-2xl bg-white/6 p-3">
-                      <p className="text-xs uppercase tracking-[0.18em] text-white/45">
-                        QR scans
-                      </p>
-                      <p className="mt-1 text-xl font-black text-white">
-                        {analyticsStats
-                          ? formatNumber(analyticsStats.qrScans ?? 0)
-                          : "—"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </section>
-
-          <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-            <div className="flex items-center justify-between gap-4">
-              <div>
-                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
-                  Content queue
-                </p>
-                <h2 className="mt-2 text-2xl font-black text-white">
-                  Ready for review
-                </h2>
-              </div>
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/12"
-              >
-                <Settings2 size={16} />
-                Table settings
-              </button>
-            </div>
-
-            <div className="mt-5 overflow-hidden rounded-[28px] border border-white/8 bg-black/10">
-              <div className="grid grid-cols-[0.8fr_2fr_0.7fr_0.9fr_0.9fr_1fr] gap-3 border-b border-white/8 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
-                <span>Type</span>
-                <span>Name</span>
-                <span>Version</span>
-                <span>Status</span>
-                <span>Updated</span>
-                <span className="text-right">Action</span>
-              </div>
-
-              <div className="divide-y divide-white/8">
-                {queueRows.length === 0 ? (
-                  <div className="px-4 py-10 text-center text-sm text-white/55">
-                    No POIs loaded from backend yet.
-                  </div>
-                ) : (
-                  queueRows.map((item) => (
-                    <div
-                      key={`${item.type}-${item.name}`}
-                      className="grid grid-cols-[0.8fr_2fr_0.7fr_0.9fr_0.9fr_1fr] items-center gap-3 px-4 py-4 text-sm"
-                    >
-                      <div className="font-semibold text-white/80">
-                        {item.type}
-                      </div>
-                      <div>
-                        <p className="font-semibold text-white">{item.name}</p>
-                        <p className="mt-1 text-xs text-white/45">
-                          Multilingual content record
-                        </p>
-                      </div>
-                      <div className="text-white/60">{item.version}</div>
-                      <div>
-                        <StatusPill tone={item.tone}>{item.status}</StatusPill>
-                      </div>
-                      <div className="text-white/60">{item.updated}</div>
-                      <div className="text-right">
-                        <button
-                          type="button"
-                          className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
-                        >
-                          Review
-                        </button>
-                      </div>
-                    </div>
-                  ))
                 )}
               </div>
-            </div>
 
-            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-white/55">
-              <span>
-                {formatNumber(totalPois)} POIs loaded •{" "}
-                {formatNumber(totalTours)} tours in manifest
-              </span>
-              <span>
-                TTS queue: {queueMode} / {queueTotal} jobs active
-              </span>
-            </div>
-          </section>
+              <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                      Hiệu suất đối tác
+                    </p>
+                    <h2 className="mt-2 text-2xl font-black text-white">
+                      Mỗi partner tạo bao nhiêu POI
+                    </h2>
+                  </div>
+                  <StatusPill
+                    tone={partnerPoiStats.length ? "emerald" : "slate"}
+                  >
+                    Top {formatNumber(partnerPoiStats.length)}
+                  </StatusPill>
+                </div>
+
+                {partnerPoiStats.length === 0 ? (
+                  <div className="mt-5 rounded-3xl border border-white/8 bg-black/10 p-4 text-sm text-white/60">
+                    Chưa có dữ liệu partner tạo POI.
+                  </div>
+                ) : (
+                  <div className="mt-5 space-y-3">
+                    {partnerPoiStats.map((item) => (
+                      <div
+                        key={item.creatorId}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/10 px-4 py-3"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-semibold text-white">
+                            {item.fullName}
+                          </p>
+                          <p className="truncate text-xs text-white/50">
+                            {item.email}
+                          </p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm font-bold text-emerald-200">
+                            {formatNumber(item.totalPois)} POI
+                          </p>
+                          <p className="text-xs text-white/50">{item.role}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {activeSection === "partners" && (
+            <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                    Đăng ký đối tác
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black text-white">
+                    Yêu cầu đăng ký
+                  </h2>
+                </div>
+                <StatusPill
+                  tone={partnerRegistrationRows.length ? "amber" : "slate"}
+                >
+                  {formatNumber(partnerRegistrationRows.length)} yêu cầu
+                </StatusPill>
+              </div>
+
+              {partnerRegistrationRows.length === 0 ? (
+                <div className="mt-5 rounded-[28px] border border-white/8 bg-black/10 p-4 text-sm text-white/60">
+                  Chưa có yêu cầu đăng ký đối tác.
+                </div>
+              ) : (
+                <div className="mt-5 grid gap-3">
+                  {partnerRegistrationRows.map((item) => {
+                    const isPending = item.status === "PENDING";
+                    return (
+                      <div
+                        key={item.id}
+                        className="rounded-[28px] border border-white/8 bg-black/10 p-4"
+                      >
+                        <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-white">
+                                {item.shopName || "Yêu cầu chưa đặt tên"}
+                              </p>
+                              <StatusPill tone={item.tone}>
+                                {item.label}
+                              </StatusPill>
+                            </div>
+                            <p className="mt-1 text-sm text-white/60">
+                              {item.shopAddress}
+                            </p>
+                            <p className="mt-2 text-xs text-white/45">
+                              Người gửi: {item.requester} •{" "}
+                              {formatRelativeTime(item.createdAt)}
+                            </p>
+                            {item.note && (
+                              <p className="mt-2 text-sm text-white/70">
+                                Ghi chú: {item.note}
+                              </p>
+                            )}
+                            {item.decisionNote && (
+                              <p className="mt-2 text-sm text-white/70">
+                                Kết quả: {item.decisionNote}
+                              </p>
+                            )}
+                          </div>
+
+                          <div className="flex flex-wrap gap-2 lg:justify-end">
+                            {isPending ? (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleReviewPartnerRegistrationRequest(
+                                      item.id,
+                                      "approve",
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-2 rounded-2xl bg-emerald-500 px-4 py-2 text-sm font-semibold text-white transition hover:brightness-105"
+                                >
+                                  Duyệt
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleReviewPartnerRegistrationRequest(
+                                      item.id,
+                                      "reject",
+                                    )
+                                  }
+                                  className="inline-flex items-center gap-2 rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/15"
+                                >
+                                  Từ chối
+                                </button>
+                              </>
+                            ) : (
+                              <span className="inline-flex items-center rounded-2xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-semibold text-white/70">
+                                Đã xử lý{" "}
+                                {item.reviewedAt
+                                  ? formatRelativeTime(item.reviewedAt)
+                                  : ""}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          )}
+
+          {activeSection === "users" && (
+            <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                    Quản lý người dùng
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black text-white">
+                    User và Partner
+                  </h2>
+                </div>
+                <StatusPill
+                  tone={filteredAdminUsers.length ? "emerald" : "slate"}
+                >
+                  {formatNumber(filteredAdminUsers.length)} /{" "}
+                  {formatNumber(userRoleStats.ALL)}
+                </StatusPill>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                <div className="rounded-2xl border border-white/10 bg-black/10 px-4 py-3">
+                  <p className="text-xs text-white/45">Tổng tài khoản</p>
+                  <p className="mt-1 text-xl font-bold text-white">
+                    {formatNumber(userRoleStats.ALL)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 px-4 py-3">
+                  <p className="text-xs text-rose-100/70">ADMIN</p>
+                  <p className="mt-1 text-xl font-bold text-rose-100">
+                    {formatNumber(userRoleStats.ADMIN)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-4 py-3">
+                  <p className="text-xs text-emerald-100/70">PARTNER</p>
+                  <p className="mt-1 text-xl font-bold text-emerald-100">
+                    {formatNumber(userRoleStats.PARTNER)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/15 bg-white/8 px-4 py-3">
+                  <p className="text-xs text-white/55">USER</p>
+                  <p className="mt-1 text-xl font-bold text-white">
+                    {formatNumber(userRoleStats.USER)}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-amber-300/20 bg-amber-400/10 px-4 py-3">
+                  <p className="text-xs text-amber-100/70">ĐÃ KHÓA</p>
+                  <p className="mt-1 text-xl font-bold text-amber-100">
+                    {formatNumber(userRoleStats.LOCKED)}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto_auto]">
+                <div className="relative min-w-0">
+                  <Search
+                    className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-white/35"
+                    size={16}
+                  />
+                  <input
+                    type="search"
+                    value={userSearchText}
+                    onChange={(e) => setUserSearchText(e.target.value)}
+                    placeholder="Tìm theo tên, email hoặc vai trò"
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/55 py-3 pl-10 pr-4 text-sm text-white placeholder:text-white/35 outline-none transition focus:border-orange-300/40"
+                  />
+                </div>
+
+                <select
+                  value={userRoleFilter}
+                  onChange={(e) => setUserRoleFilter(e.target.value)}
+                  className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm font-semibold text-white outline-none"
+                >
+                  <option value="ALL">Tất cả vai trò</option>
+                  <option value="USER">USER</option>
+                  <option value="PARTNER">PARTNER</option>
+                  <option value="ADMIN">ADMIN</option>
+                </select>
+
+                <select
+                  value={String(userPageSize)}
+                  onChange={(e) => setUserPageSize(Number(e.target.value))}
+                  className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm font-semibold text-white outline-none"
+                >
+                  <option value="10">10 / trang</option>
+                  <option value="20">20 / trang</option>
+                  <option value="50">50 / trang</option>
+                </select>
+              </div>
+
+              {filteredAdminUsers.length === 0 ? (
+                <div className="mt-5 rounded-[28px] border border-white/8 bg-black/10 p-4 text-sm text-white/60">
+                  Không có tài khoản phù hợp bộ lọc.
+                </div>
+              ) : (
+                <>
+                  <div className="mt-5 overflow-hidden rounded-[28px] border border-white/8 bg-black/10">
+                    <div className="grid grid-cols-[1.8fr_2fr_0.9fr_1fr_1fr_2.3fr] gap-3 border-b border-white/8 px-4 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-white/45">
+                      <span>Người dùng</span>
+                      <span>Email</span>
+                      <span>Vai trò</span>
+                      <span>Trạng thái</span>
+                      <span>Tạo</span>
+                      <span className="text-right">Hành động</span>
+                    </div>
+
+                    <div className="divide-y divide-white/8">
+                      {pagedAdminUsers.map((user) => (
+                        <div
+                          key={user.id}
+                          className="grid grid-cols-[1.8fr_2fr_0.9fr_1fr_1fr_2.3fr] items-center gap-3 px-4 py-4 text-sm"
+                        >
+                          <div className="min-w-0">
+                            <p className="truncate font-semibold text-white">
+                              {user.fullName || "Chưa cập nhật tên"}
+                            </p>
+                            <p className="mt-1 truncate text-xs text-white/45">
+                              ID: {user.id}
+                            </p>
+                          </div>
+
+                          <p className="truncate text-white/80">{user.email}</p>
+
+                          <StatusPill tone={roleToneMap[user.role] ?? "slate"}>
+                            {user.role}
+                          </StatusPill>
+
+                          <StatusPill
+                            tone={user.isActive ? "emerald" : "amber"}
+                          >
+                            {user.isActive ? "Hoạt động" : "Đã khóa"}
+                          </StatusPill>
+
+                          <p className="text-xs text-white/60">
+                            {formatRelativeTime(user.createdAt)}
+                          </p>
+
+                          <div className="flex flex-wrap justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestUpdateUserRole(user.id, "PARTNER")
+                              }
+                              disabled={
+                                isUpdatingUserRoleId === user.id ||
+                                user.role === "PARTNER"
+                              }
+                              className="inline-flex items-center rounded-xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100 disabled:opacity-50"
+                            >
+                              PARTNER
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestUpdateUserRole(user.id, "ADMIN")
+                              }
+                              disabled={
+                                isUpdatingUserRoleId === user.id ||
+                                user.role === "ADMIN"
+                              }
+                              className="inline-flex items-center rounded-xl border border-rose-300/30 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-100 disabled:opacity-50"
+                            >
+                              ADMIN
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestUpdateUserRole(user.id, "USER")
+                              }
+                              disabled={
+                                isUpdatingUserRoleId === user.id ||
+                                user.role === "USER"
+                              }
+                              className="inline-flex items-center rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+                            >
+                              USER
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestUpdateUserAccess(user.id, true)
+                              }
+                              disabled={
+                                isUpdatingUserAccessId === user.id ||
+                                !user.isActive ||
+                                user.role === "ADMIN"
+                              }
+                              title={
+                                user.role === "ADMIN"
+                                  ? "Tài khoản ADMIN không được khóa"
+                                  : "Khóa tài khoản"
+                              }
+                              className="inline-flex items-center rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs font-semibold text-amber-100 disabled:opacity-50"
+                            >
+                              Khóa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                requestUpdateUserAccess(user.id, false)
+                              }
+                              disabled={
+                                isUpdatingUserAccessId === user.id ||
+                                user.isActive
+                              }
+                              className="inline-flex items-center rounded-xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 disabled:opacity-50"
+                            >
+                              Mở khóa
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-white/65">
+                    <span>
+                      Trang {userPage}/{totalUserPages} • Hiển thị{" "}
+                      {formatNumber(pagedAdminUsers.length)} /{" "}
+                      {formatNumber(filteredAdminUsers.length)}
+                    </span>
+                    <div className="inline-flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setUserPage((p) => Math.max(1, p - 1))}
+                        disabled={userPage <= 1}
+                        className="rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                      >
+                        Trước
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setUserPage((p) => Math.min(totalUserPages, p + 1))
+                        }
+                        disabled={userPage >= totalUserPages}
+                        className="rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-semibold text-white disabled:opacity-40"
+                      >
+                        Sau
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+            </section>
+          )}
+
+          {activeSection === "pois" && (
+            <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+              <div className="flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                    Danh sách POI
+                  </p>
+                  <h2 className="mt-2 text-2xl font-black text-white">
+                    Theo dõi theo loại
+                  </h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={poiTypeFilter}
+                    onChange={(e) => setPoiTypeFilter(e.target.value)}
+                    className="rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm font-semibold text-white outline-none"
+                  >
+                    <option value="ALL">Tất cả loại POI</option>
+                    {poiTypeOptions.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-4 py-3 text-sm font-semibold text-white/75 transition hover:bg-white/12"
+                  >
+                    <Settings2 size={16} />
+                    Cài đặt bảng
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 overflow-hidden rounded-[28px] border border-white/8 bg-black/10">
+                <div className="grid grid-cols-[0.8fr_2fr_0.7fr_0.9fr_0.9fr_1fr] gap-3 border-b border-white/8 px-4 py-3 text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
+                  <span>Loại</span>
+                  <span>Tên</span>
+                  <span>Phiên bản</span>
+                  <span>Trạng thái</span>
+                  <span>Cập nhật</span>
+                  <span className="text-right">Thao tác</span>
+                </div>
+
+                <div className="divide-y divide-white/8">
+                  {queueRows.length === 0 ? (
+                    <div className="px-4 py-10 text-center text-sm text-white/55">
+                      Chưa tải được POI từ backend.
+                    </div>
+                  ) : (
+                    queueRows.map((item) => (
+                      <div
+                        key={`${item.type}-${item.name}`}
+                        className="grid grid-cols-[0.8fr_2fr_0.7fr_0.9fr_0.9fr_1fr] items-center gap-3 px-4 py-4 text-sm"
+                      >
+                        <div className="font-semibold text-white/80">
+                          {item.type}
+                        </div>
+                        <div>
+                          <p className="font-semibold text-white">
+                            {item.name}
+                          </p>
+                          <p className="mt-1 text-xs text-white/45">
+                            Bản ghi nội dung đa ngôn ngữ
+                          </p>
+                        </div>
+                        <div className="text-white/60">{item.version}</div>
+                        <div>
+                          <StatusPill tone={item.tone}>
+                            {item.status}
+                          </StatusPill>
+                        </div>
+                        <div className="text-white/60">{item.updated}</div>
+                        <div className="text-right">
+                          <button
+                            type="button"
+                            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
+                          >
+                            Xem
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-sm text-white/55">
+                <span>{formatNumber(totalPois)} POI đã tải</span>
+                <span>
+                  Lọc theo loại:{" "}
+                  {poiTypeFilter === "ALL" ? "Tất cả" : poiTypeFilter} • Hiển
+                  thị {formatNumber(queueRows.length)}/
+                  {formatNumber(filteredPoiRows.length)}
+                </span>
+              </div>
+            </section>
+          )}
+
+          {activeSection === "settings" && (
+            <section className="mt-6 rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+              <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                Cài đặt
+              </p>
+              <h2 className="mt-2 text-2xl font-black text-white">
+                Cấu hình hệ thống
+              </h2>
+              <div className="mt-5 rounded-2xl border border-white/8 bg-black/10 p-4 text-sm text-white/70">
+                Khu vực cài đặt đang được chuẩn hóa. Bạn có thể bổ sung các cấu
+                hình hệ thống tại đây theo nhu cầu vận hành.
+              </div>
+            </section>
+          )}
         </main>
       </div>
+
+      {pendingUserAction && confirmDialogContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <button
+            type="button"
+            aria-label="Đóng xác nhận"
+            className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
+            onClick={() => !isConfirmingAction && setPendingUserAction(null)}
+            disabled={isConfirmingAction}
+          />
+
+          <div className="relative z-10 w-full max-w-md rounded-3xl border border-white/10 bg-slate-900/95 p-6 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+            <h3 className="text-xl font-black text-white">
+              {confirmDialogContent.title}
+            </h3>
+            <p className="mt-3 text-sm leading-relaxed text-white/70">
+              {confirmDialogContent.message}
+            </p>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setPendingUserAction(null)}
+                disabled={isConfirmingAction}
+                className="rounded-2xl border border-white/15 bg-white/8 px-4 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/12 disabled:opacity-50"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmUserAction}
+                disabled={isConfirmingAction}
+                className="rounded-2xl bg-linear-to-r from-orange-500 to-rose-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-orange-500/20 transition hover:brightness-105 disabled:opacity-50"
+              >
+                {isConfirmingAction
+                  ? "Đang xử lý..."
+                  : confirmDialogContent.confirmText}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

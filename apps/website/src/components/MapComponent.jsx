@@ -6,6 +6,7 @@ import {
   Marker,
   TileLayer,
   Tooltip,
+  useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
 import { Search } from "lucide-react";
@@ -68,6 +69,16 @@ const calculateDistanceMeters = (lat1, lng1, lat2, lng2) => {
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
   return earthRadius * c;
 };
+
+function MapClickHandler({ onMapClick }) {
+  useMapEvents({
+    click(event) {
+      onMapClick(event.latlng.lat, event.latlng.lng);
+    },
+  });
+
+  return null;
+}
 
 export default function MapComponent() {
   const [poisRaw, setPoisRaw] = useState([]);
@@ -296,6 +307,49 @@ export default function MapComponent() {
     });
   };
 
+  const handleMapClick = (lat, lng) => {
+    setUserPosition([lat, lng]);
+
+    if (mapInstance) {
+      mapInstance.flyTo([lat, lng], 16, {
+        duration: 1.1,
+      });
+    }
+
+    let nearestPOI = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+
+    for (const poi of pois) {
+      const distance = calculateDistanceMeters(
+        lat,
+        lng,
+        poi.latitude,
+        poi.longitude,
+      );
+      const poiRadius = Number(poi.radius) || DEFAULT_POI_RADIUS_METERS;
+
+      if (distance <= poiRadius && distance < nearestDistance) {
+        nearestPOI = poi;
+        nearestDistance = distance;
+      }
+    }
+
+    if (!nearestPOI) {
+      return;
+    }
+
+    setSelectedPOI(nearestPOI);
+    setSearchText(nearestPOI.name);
+    setToastMessage(`Bạn đã vào vùng ${nearestPOI.name}`);
+
+    if (!nearestPOI.audioUrl) {
+      setToastMessage(`POI ${nearestPOI.name} chưa có audio để tự phát`);
+      return;
+    }
+
+    setAutoPlaySignal((value) => value + 1);
+  };
+
   return (
     <div className="w-full h-full relative">
       <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-[92%] max-w-4xl">
@@ -352,6 +406,8 @@ export default function MapComponent() {
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
         />
+
+        <MapClickHandler onMapClick={handleMapClick} />
 
         {pois.map((poi) => (
           <Circle

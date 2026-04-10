@@ -24,9 +24,25 @@ export default function Login() {
       if (data.accessToken) {
         localStorage.setItem("accessToken", data.accessToken);
         localStorage.setItem("refreshToken", data.refreshToken);
+
+        // Store role if available
+        if (data.role) {
+          localStorage.setItem("uiRole", String(data.role).toUpperCase());
+        }
+
         showSuccess(t.toast?.loginSuccess || "Login successful!");
+
+        // Redirect based on role
+        const role = (data.role || "USER").toUpperCase();
+        const redirectPath =
+          role === "ADMIN"
+            ? "/admin"
+            : role === "PARTNER"
+              ? "/partner-profile"
+              : "/";
+
         setTimeout(() => {
-          window.location.href = "/";
+          window.location.href = redirectPath;
         }, 1000);
       } else {
         const errorMsg = data.message || t.toast?.loginFailed || "Login failed";
@@ -34,7 +50,8 @@ export default function Login() {
         showError(errorMsg);
       }
     } catch (err) {
-      const errorMsg = err.message || t.toast?.loginError || "An error occurred during login";
+      const errorMsg =
+        err.message || t.toast?.loginError || "An error occurred during login";
       setError(errorMsg);
       showError(errorMsg);
     } finally {

@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import {
   Circle,
@@ -8,6 +8,7 @@ import {
   useMapEvents,
 } from "react-leaflet";
 import L from "leaflet";
+import QRCode from "qrcode";
 import { partnerAPI, ttsAPI, usersAPI } from "../lib/api";
 import { useToast } from "../hooks/useToast";
 
@@ -79,16 +80,17 @@ export default function PartnerProfile() {
     useState(false);
 
   const [pois, setPois] = useState([]);
+  const [poiQrMap, setPoiQrMap] = useState({});
   const [isLoadingPartnerData, setIsLoadingPartnerData] = useState(false);
 
   const [isPoiModalOpen, setIsPoiModalOpen] = useState(false);
+  const [editingPoiId, setEditingPoiId] = useState(null);
   const [pointName, setPointName] = useState("");
   const [pointDescription, setPointDescription] = useState("");
   const [pointCategory, setPointCategory] = useState("FOOD");
   const [latitudeInput, setLatitudeInput] = useState("10.762622");
   const [longitudeInput, setLongitudeInput] = useState("106.660172");
   const [radiusInput, setRadiusInput] = useState("120");
-  const [reasonInput, setReasonInput] = useState("");
   const [isCreatingPoi, setIsCreatingPoi] = useState(false);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreviewUrl, setImagePreviewUrl] = useState("");
@@ -96,12 +98,17 @@ export default function PartnerProfile() {
   const [generatedAudioUrl, setGeneratedAudioUrl] = useState("");
   const [audioError, setAudioError] = useState("");
   const [selectedAudioLanguage, setSelectedAudioLanguage] = useState("auto");
+  const [deletingPoiId, setDeletingPoiId] = useState(null);
 
   const role = String(profile?.role || "USER").toUpperCase();
   const isPartner = role === "PARTNER";
   const publishedCount = pois.filter((item) =>
     Boolean(item?.isPublished),
   ).length;
+  const publishedPois = useMemo(
+    () => pois.filter((item) => Boolean(item?.isPublished)),
+    [pois],
+  );
 
   const latestPartnerRegistrationRequest =
     partnerRegistrationRequests[0] || null;
@@ -111,6 +118,8 @@ export default function PartnerProfile() {
     clampCoordinate(longitudeInput, -180, 180) !== null
       ? [Number(latitudeInput), Number(longitudeInput)]
       : null;
+
+  const isEditingPoi = Boolean(editingPoiId);
 
   const resetPoiForm = () => {
     if (imagePreviewUrl) {
@@ -125,12 +134,33 @@ export default function PartnerProfile() {
     setLatitudeInput("10.762622");
     setLongitudeInput("106.660172");
     setRadiusInput("120");
-    setReasonInput("");
     setImageFile(null);
     setImagePreviewUrl("");
     setGeneratedAudioUrl("");
     setAudioError("");
     setSelectedAudioLanguage("auto");
+    setEditingPoiId(null);
+  };
+
+  const openCreatePoiModal = () => {
+    resetPoiForm();
+    setIsPoiModalOpen(true);
+  };
+
+  const openEditPoiModal = (item) => {
+    resetPoiForm();
+    setEditingPoiId(item.id);
+    setPointName(item?.name?.vi || item?.name?.en || pickLocalized(item.name));
+    setPointDescription(
+      item?.description?.vi ||
+        item?.description?.en ||
+        pickLocalized(item.description),
+    );
+    setPointCategory(item?.type || "FOOD");
+    setLatitudeInput(String(item?.latitude ?? ""));
+    setLongitudeInput(String(item?.longitude ?? ""));
+    setRadiusInput(String(item?.radius ?? 120));
+    setIsPoiModalOpen(true);
   };
 
   useEffect(() => {
@@ -196,6 +226,55 @@ export default function PartnerProfile() {
     if (!token) return;
     loadProfile();
   }, [token]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const buildPoiQrs = async () => {
+      if (!pois.length) {
+        setPoiQrMap({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        pois.map(async (poi) => {
+          const poiId = String(poi?.id || "").trim();
+
+          if (!poiId) {
+            return [poiId, ""];
+          }
+
+          try {
+            const qrDataUrl = await QRCode.toDataURL(poiId, {
+              width: 112,
+              margin: 1,
+            });
+            return [poiId, qrDataUrl];
+          } catch {
+            return [poiId, ""];
+          }
+        }),
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      const nextMap = {};
+      for (const [poiId, qrDataUrl] of entries) {
+        if (poiId && qrDataUrl) {
+          nextMap[poiId] = qrDataUrl;
+        }
+      }
+      setPoiQrMap(nextMap);
+    };
+
+    buildPoiQrs();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [pois]);
 
   useEffect(() => {
     if (!isPartner) {
@@ -278,27 +357,72 @@ export default function PartnerProfile() {
       latitude,
       longitude,
       radius,
-      reason: reasonInput.trim() || undefined,
     };
 
     try {
       setIsCreatingPoi(true);
-      const created = await partnerAPI.createPoiRequest(payload);
-      const createdPoiId = created?.data?.id;
+      if (isEditingPoi && editingPoiId) {
+        await partnerAPI.updatePoiRequest(editingPoiId, payload);
 
-      if (imageFile && createdPoiId) {
-        try {
-          await partnerAPI.uploadPoiImage(createdPoiId, imageFile);
-          showSuccess("Đã tạo POI và upload ảnh thành công.");
-        } catch (uploadError) {
-          showError(
-            uploadError instanceof Error
-              ? `POI đã tạo nhưng upload ảnh thất bại: ${uploadError.message}`
-              : "POI đã tạo nhưng upload ảnh thất bại.",
-          );
+        if (imageFile) {
+          try {
+            await partnerAPI.uploadPoiImage(editingPoiId, imageFile);
+            showSuccess("Đã cập nhật POI và upload ảnh thành công.");
+          } catch (uploadError) {
+            showError(
+              uploadError instanceof Error
+                ? `POI đã cập nhật nhưng upload ảnh thất bại: ${uploadError.message}`
+                : "POI đã cập nhật nhưng upload ảnh thất bại.",
+            );
+          }
+        } else {
+          showSuccess("Đã cập nhật POI thành công.");
         }
       } else {
-        showSuccess("Đã tạo POI thành công.");
+        const created = await partnerAPI.createPoiRequest(payload);
+        const createdPoi = created?.data || created;
+        const createdPoiId = createdPoi?.id;
+
+        if (imageFile && createdPoiId) {
+          try {
+            await partnerAPI.uploadPoiImage(createdPoiId, imageFile);
+            showSuccess("Đã tạo POI và upload ảnh thành công.");
+          } catch (uploadError) {
+            showError(
+              uploadError instanceof Error
+                ? `POI đã tạo nhưng upload ảnh thất bại: ${uploadError.message}`
+                : "POI đã tạo nhưng upload ảnh thất bại.",
+            );
+          }
+        } else {
+          showSuccess("Đã tạo POI thành công.");
+        }
+
+        if (createdPoiId) {
+          try {
+            const qrDataUrl = await QRCode.toDataURL(String(createdPoiId), {
+              width: 320,
+              margin: 1,
+            });
+
+            const downloadLink = document.createElement("a");
+            downloadLink.href = qrDataUrl;
+            downloadLink.download = `poi-${createdPoiId}-qr.png`;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+
+            showSuccess("Đã tạo mã QR chứa ID của POI.");
+          } catch (qrError) {
+            showError(
+              qrError instanceof Error
+                ? `POI đã tạo nhưng tạo QR thất bại: ${qrError.message}`
+                : "POI đã tạo nhưng tạo QR thất bại.",
+            );
+          }
+        } else {
+          showError("POI đã tạo nhưng chưa có ID để tạo mã QR.");
+        }
       }
 
       setIsPoiModalOpen(false);
@@ -376,6 +500,26 @@ export default function PartnerProfile() {
       showError(message);
     } finally {
       setIsGeneratingAudio(false);
+    }
+  };
+
+  const handleDeletePoi = async (item) => {
+    if (!item?.id) return;
+
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa POI "${pickLocalized(item.name)}"?`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setDeletingPoiId(item.id);
+      await partnerAPI.deletePoiRequest(item.id, "Xóa POI từ trang đối tác");
+      showSuccess("Đã xóa POI thành công.");
+      await loadPartnerData();
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "Không thể xóa POI.");
+    } finally {
+      setDeletingPoiId(null);
     }
   };
 
@@ -535,20 +679,12 @@ export default function PartnerProfile() {
                   {publishedCount}
                 </p>
               </div>
-              <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                <p className="text-xs uppercase tracking-wider text-slate-500">
-                  POI chưa publish
-                </p>
-                <p className="mt-2 text-3xl font-black text-slate-900">
-                  {Math.max(0, pois.length - publishedCount)}
-                </p>
-              </div>
             </section>
 
             <div className="mb-6 flex items-center justify-between gap-3">
               <button
                 type="button"
-                onClick={() => setIsPoiModalOpen(true)}
+                onClick={openCreatePoiModal}
                 className="h-11 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700"
               >
                 Tạo POI mới
@@ -567,9 +703,9 @@ export default function PartnerProfile() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 Danh sách POI hiện tại
               </p>
-              {pois.length === 0 ? (
+              {publishedPois.length === 0 ? (
                 <p className="text-sm text-slate-600">
-                  Chưa có POI nào thuộc tài khoản của bạn.
+                  Chưa có POI nào đã publish thuộc tài khoản của bạn.
                 </p>
               ) : (
                 <div className="overflow-x-auto">
@@ -580,11 +716,18 @@ export default function PartnerProfile() {
                         <th className="py-2 pr-4 font-semibold">Loại</th>
                         <th className="py-2 pr-4 font-semibold">Tọa độ</th>
                         <th className="py-2 pr-4 font-semibold">Xuất bản</th>
+                        <th className="py-2 pr-4 font-semibold">
+                          Thời gian tạo
+                        </th>
+                        <th className="py-2 pr-4 font-semibold">QR POI</th>
                         <th className="py-2 pr-0 font-semibold">Cập nhật</th>
+                        <th className="py-2 pr-0 font-semibold text-right">
+                          Thao tác
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
-                      {pois.map((item) => (
+                      {publishedPois.map((item) => (
                         <tr
                           key={item.id}
                           className="border-b border-slate-100 text-slate-700 last:border-b-0"
@@ -600,8 +743,52 @@ export default function PartnerProfile() {
                           <td className="py-2 pr-4">
                             {item.isPublished ? "Có" : "Chưa"}
                           </td>
+                          <td className="py-2 pr-4 text-xs">
+                            {formatDate(item.createdAt)}
+                          </td>
+                          <td className="py-2 pr-4">
+                            {poiQrMap[item.id] ? (
+                              <a
+                                href={poiQrMap[item.id]}
+                                download={`poi-${item.id}-qr.png`}
+                                title="Tải QR"
+                                className="inline-flex rounded-lg border border-slate-200 p-1 transition hover:border-emerald-300 hover:bg-emerald-50"
+                              >
+                                <img
+                                  src={poiQrMap[item.id]}
+                                  alt={`QR POI ${pickLocalized(item.name)}`}
+                                  className="h-14 w-14 rounded object-cover"
+                                />
+                              </a>
+                            ) : (
+                              <span className="text-xs text-slate-400">
+                                Chưa có mã QR
+                              </span>
+                            )}
+                          </td>
                           <td className="py-2 pr-0 text-xs">
                             {formatDate(item.updatedAt)}
+                          </td>
+                          <td className="py-2 pl-3 pr-0 text-right">
+                            <div className="inline-flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => openEditPoiModal(item)}
+                                className="h-8 rounded-lg border border-slate-300 px-3 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                              >
+                                Sửa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePoi(item)}
+                                disabled={deletingPoiId === item.id}
+                                className="h-8 rounded-lg border border-rose-300 px-3 text-xs font-semibold text-rose-700 transition hover:bg-rose-50 disabled:opacity-60"
+                              >
+                                {deletingPoiId === item.id
+                                  ? "Đang xóa..."
+                                  : "Xóa"}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -623,7 +810,7 @@ export default function PartnerProfile() {
             <form onSubmit={handleCreatePoiRequest}>
               <div className="mb-3 flex items-center justify-between gap-3">
                 <p className="text-sm font-semibold text-slate-900">
-                  Tạo POI trực tiếp
+                  {isEditingPoi ? "Cập nhật POI" : "Tạo POI trực tiếp"}
                 </p>
                 <button
                   type="button"
@@ -864,31 +1051,24 @@ export default function PartnerProfile() {
                 </MapContainer>
               </div>
 
-              <div className="mt-3">
-                <label className="grid gap-1">
-                  <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Ghi chú (không bắt buộc)
-                  </span>
-                  <textarea
-                    value={reasonInput}
-                    onChange={(e) => setReasonInput(e.target.value)}
-                    placeholder="Nhập ghi chú nếu có"
-                    rows={2}
-                    className="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-emerald-500"
-                  />
-                </label>
-              </div>
-
               <div className="mt-3 flex items-center justify-between gap-3">
                 <p className="text-xs text-slate-500">
-                  POI sẽ được tạo ngay sau khi gửi.
+                  {isEditingPoi
+                    ? "POI sẽ được cập nhật ngay sau khi gửi."
+                    : "POI sẽ được tạo ngay sau khi gửi."}
                 </p>
                 <button
                   type="submit"
                   disabled={isCreatingPoi}
                   className="h-11 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700 disabled:opacity-60"
                 >
-                  {isCreatingPoi ? "Đang tạo..." : "Tạo POI"}
+                  {isCreatingPoi
+                    ? isEditingPoi
+                      ? "Đang cập nhật..."
+                      : "Đang tạo..."
+                    : isEditingPoi
+                      ? "Cập nhật POI"
+                      : "Tạo POI"}
                 </button>
               </div>
             </form>

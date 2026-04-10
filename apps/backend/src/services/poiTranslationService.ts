@@ -45,14 +45,22 @@ function resolveSourceLanguage(
 
 export async function ensurePoiLocalizedTextMap(
   input: Record<string, string>,
+  options?: { strict?: boolean },
 ): Promise<Record<PoiLanguage, string>> {
   const normalizedInput = normalizeInputMap(input);
   const sourceLanguage = resolveSourceLanguage(normalizedInput);
   const sourceText = normalizedInput[sourceLanguage];
-  const strictMode = isStrictTranslationMode();
+  const strictMode = options?.strict ?? isStrictTranslationMode();
+  const targetLanguages = Array.from(
+    new Set(
+      POI_TARGET_LANGUAGES.map((language) =>
+        normalizePoiLanguage(language),
+      ).filter((language): language is PoiLanguage => Boolean(language)),
+    ),
+  );
 
   const entries = await Promise.all(
-    POI_TARGET_LANGUAGES.map(async (targetLanguage) => {
+    targetLanguages.map(async (targetLanguage) => {
       const existing = normalizedInput[targetLanguage];
       if (existing) {
         return [targetLanguage, existing] as const;
@@ -72,9 +80,10 @@ export async function ensurePoiLocalizedTextMap(
         return [targetLanguage, translated] as const;
       } catch (error) {
         if (strictMode) {
+          const reason = error instanceof Error ? error.message : String(error);
           throw new ApiError(
             500,
-            `Không thể dịch nội dung sang ngôn ngữ ${targetLanguage}.`,
+            `Không thể dịch nội dung sang ngôn ngữ ${targetLanguage}. Chi tiết: ${reason}. Vui lòng kiểm tra GOOGLE_APPLICATION_CREDENTIALS/GOOGLE_TRANSLATE_CREDENTIALS_JSON và bật Cloud Translation API.`,
           );
         }
 

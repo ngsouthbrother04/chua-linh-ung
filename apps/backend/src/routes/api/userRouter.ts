@@ -50,15 +50,8 @@ router.post(
         throw new ApiError(400, "Ngôn ngữ TTS chưa được hỗ trợ.");
       }
 
-      if (message === "PIPER_MODEL_NOT_CONFIGURED") {
-        throw new ApiError(500, "TTS chưa được cấu hình model giọng đọc.");
-      }
-
-      if (
-        message.startsWith("PIPER_PROCESS_EXIT_") ||
-        message.startsWith("PIPER_EXECUTION_FAILED")
-      ) {
-        throw new ApiError(500, "TTS runtime lỗi khi sinh audio.");
+      if (message.startsWith("GOOGLE_TTS_") || message.startsWith("TTS_")) {
+        throw new ApiError(500, "Google TTS runtime lỗi khi sinh audio.");
       }
 
       throw new ApiError(500, "Không thể tạo audio test từ mô tả.");

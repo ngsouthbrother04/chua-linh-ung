@@ -1,8 +1,11 @@
 import { PoiType, Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
 import ApiError from "../utils/ApiError";
-import { cleanupPoiAudioFiles, enqueuePoiTtsGeneration } from "./ttsService";
-import { removeCloudinaryImageByUrl } from "./imageService";
+import { cleanupPoiAudioFiles } from "./ttsService";
+import {
+  removeCloudinaryAudioByUrl,
+  removeCloudinaryImageByUrl,
+} from "./imageService";
 import { recordAdminAuditEvent } from "./adminAuditService";
 import { generateMultiLanguageAudioForPoi } from "./poiAudioGenerationService";
 import { ensurePoiLocalizedTextMap } from "./poiTranslationService";
@@ -496,8 +499,10 @@ export async function createAdminPoi(
   const inputName = normalizeTextMap(input.name, "name");
   const inputDescription = normalizeTextMap(input.description, "description");
   assertMatchingLanguageSets(inputName, inputDescription);
-  const name = await ensurePoiLocalizedTextMap(inputName);
-  const description = await ensurePoiLocalizedTextMap(inputDescription);
+  const name = await ensurePoiLocalizedTextMap(inputName, { strict: true });
+  const description = await ensurePoiLocalizedTextMap(inputDescription, {
+    strict: true,
+  });
   const latitude = normalizeNumericField(input.latitude, "latitude");
   const longitude = normalizeNumericField(input.longitude, "longitude");
   const type = normalizePoiType(input.type);
@@ -701,12 +706,27 @@ export async function updateAdminPoi(
     throw new ApiError(403, "Không có quyền sửa POI này.");
   }
 
-  const name =
-    input.name !== undefined ? normalizeTextMap(input.name, "name") : undefined;
-  const description =
-    input.description !== undefined
-      ? normalizeTextMap(input.description, "description")
-      : undefined;
+  const hasNameOrDescriptionUpdate =
+    input.name !== undefined || input.description !== undefined;
+
+  let name: Record<string, string> | undefined;
+  let description: Record<string, string> | undefined;
+
+  if (hasNameOrDescriptionUpdate) {
+    const nextNameInput =
+      input.name !== undefined
+        ? normalizeTextMap(input.name, "name")
+        : normalizeTextMap(existingPoi.name, "name");
+    const nextDescriptionInput =
+      input.description !== undefined
+        ? normalizeTextMap(input.description, "description")
+        : normalizeTextMap(existingPoi.description, "description");
+
+    name = await ensurePoiLocalizedTextMap(nextNameInput, { strict: true });
+    description = await ensurePoiLocalizedTextMap(nextDescriptionInput, {
+      strict: true,
+    });
+  }
   const latitude =
     input.latitude !== undefined
       ? normalizeNumericField(input.latitude, "latitude")
@@ -740,6 +760,20 @@ export async function updateAdminPoi(
     input.audioUrls !== undefined
       ? normalizeAudioUrls(input.audioUrls)
       : undefined;
+  const existingAudioUrls =
+    existingPoi.audioUrls && typeof existingPoi.audioUrls === "object"
+      ? Object.entries(existingPoi.audioUrls as Record<string, unknown>).reduce<
+          Record<string, string>
+        >((acc, [language, value]) => {
+          if (typeof value === "string" && value.trim()) {
+            acc[language.trim()] = value.trim();
+          }
+
+          return acc;
+        }, {})
+      : {};
+  const shouldRegenerateAudioFromDescription =
+    input.description !== undefined && input.audioUrls === undefined;
 
   const mergedName = name ?? normalizeTextMap(existingPoi.name, "name");
   const mergedDescription =
@@ -769,7 +803,7 @@ export async function updateAdminPoi(
       image,
       radius,
       creatorId,
-      audioUrls,
+      audioUrls: shouldRegenerateAudioFromDescription ? {} : audioUrls,
       contentVersion: {
         increment: 1,
       },
@@ -794,6 +828,61 @@ export async function updateAdminPoi(
     },
   });
 
+  let resultPoi = updatedPoi;
+
+  // Keep update behavior consistent with create flow: regenerate Cloudinary audio URLs.
+  if (shouldRegenerateAudioFromDescription) {
+    try {
+      await Promise.all(
+        Object.values(existingAudioUrls).map(async (audioUrl) => {
+          try {
+            await removeCloudinaryAudioByUrl(audioUrl);
+          } catch (error) {
+            console.warn("[Cloudinary] Failed to cleanup old POI audio", {
+              poiId,
+              audioUrl,
+              error,
+            });
+          }
+        }),
+      );
+
+      await cleanupPoiAudioFiles(poiId);
+      const generatedAudioUrls = await generateMultiLanguageAudioForPoi(
+        mergedDescription,
+        [...POI_TARGET_LANGUAGES],
+      );
+
+      resultPoi = await dbClient.pointOfInterest.update({
+        where: { id: poiId },
+        data: { audioUrls: generatedAudioUrls },
+        select: {
+          id: true,
+          name: true,
+          description: true,
+          audioUrls: true,
+          latitude: true,
+          longitude: true,
+          type: true,
+          image: true,
+          radius: true,
+          creatorId: true,
+          isPublished: true,
+          publishedAt: true,
+          deletedAt: true,
+          contentVersion: true,
+          createdAt: true,
+          updatedAt: true,
+        },
+      });
+    } catch (error) {
+      console.error(
+        `[POI_AUDIO_REGENERATION_FAILED] poi_id=${poiId}:`,
+        error instanceof Error ? error.message : error,
+      );
+    }
+  }
+
   const action = normalizeActionContext(context);
   await recordAdminAuditEvent({
     action: "poi.update",
@@ -803,25 +892,12 @@ export async function updateAdminPoi(
     reason: action.reason,
     source: action.source,
     metadata: {
-      contentVersion: updatedPoi.contentVersion,
-      isPublished: updatedPoi.isPublished,
+      contentVersion: resultPoi.contentVersion,
+      isPublished: resultPoi.isPublished,
     },
   });
 
-  // Auto-trigger TTS generation if description changed
-  if (description !== undefined) {
-    try {
-      await enqueuePoiTtsGeneration(poiId);
-    } catch (error) {
-      console.error("[POI Update] Failed to enqueue TTS generation", {
-        poiId,
-        error,
-      });
-      // Don't throw - TTS queueing failure should not block POI update
-    }
-  }
-
-  return toAdminPoiRecord(updatedPoi);
+  return toAdminPoiRecord(resultPoi);
 }
 
 export async function getAdminTourById(

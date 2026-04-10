@@ -1,7 +1,11 @@
-import { Router } from 'express';
-import asyncHandler from '../../utils/asyncHandler';
-import ApiError from '../../utils/ApiError';
-import { getCurrentUserRole, isAccessTokenSessionActive, verifyJwt } from '../../services/authService';
+import { Router } from "express";
+import asyncHandler from "../../utils/asyncHandler";
+import ApiError from "../../utils/ApiError";
+import {
+  getCurrentUserRole,
+  isAccessTokenSessionActive,
+  verifyJwt,
+} from "../../services/authService";
 import {
   createAdminPoi,
   createAdminTour,
@@ -14,36 +18,57 @@ import {
   purgeSoftDeletedPois,
   publishAdminPoi,
   updateAdminPoi,
-  updateAdminTour
-} from '../../services/poiAdminService';
+  updateAdminTour,
+} from "../../services/poiAdminService";
 import {
   getPartnerRegistrationRequestById,
   listPartnerRegistrationRequests,
-  reviewPartnerRegistrationRequest
-} from '../../services/partnerRegistrationService';
-import { enqueuePoiTtsGeneration, getTtsQueueStatus, validateTtsRuntimeConfig } from '../../services/ttsService';
-import { assignAdminUserRole, listAdminUsers, revokeAdminUserRole } from '../../services/adminUserRoleService';
+  reviewPartnerRegistrationRequest,
+} from "../../services/partnerRegistrationService";
+import {
+  enqueuePoiTtsGeneration,
+  getTtsQueueStatus,
+  validateTtsRuntimeConfig,
+} from "../../services/ttsService";
+import {
+  assignAdminUserRole,
+  listAdminUsers,
+  revokeAdminUserRole,
+  setAdminUserAccessStatus,
+} from "../../services/adminUserRoleService";
 
 const router = Router();
 
-async function assertAdminAccess(req: { headers: Record<string, unknown> }): Promise<{ actorId: string }> {
-  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+async function assertAdminAccess(req: {
+  headers: Record<string, unknown>;
+}): Promise<{ actorId: string }> {
+  const authHeader =
+    typeof req.headers.authorization === "string"
+      ? req.headers.authorization
+      : "";
+  const accessToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
 
   if (!accessToken) {
-    throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
+    throw new ApiError(403, "Không có quyền truy cập admin endpoint.");
   }
 
   const payload = verifyJwt(accessToken) as { sub?: string; role?: string };
   const isActive = await isAccessTokenSessionActive(accessToken);
-  if (!isActive || payload.role !== 'ADMIN' || typeof payload.sub !== 'string' || !payload.sub.trim()) {
-    throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
+  if (
+    !isActive ||
+    payload.role !== "ADMIN" ||
+    typeof payload.sub !== "string" ||
+    !payload.sub.trim()
+  ) {
+    throw new ApiError(403, "Không có quyền truy cập admin endpoint.");
   }
 
   const actorId = payload.sub.trim();
   const currentRole = await getCurrentUserRole(actorId);
-  if (currentRole && currentRole !== 'ADMIN') {
-    throw new ApiError(403, 'Không có quyền truy cập admin endpoint.');
+  if (currentRole && currentRole !== "ADMIN") {
+    throw new ApiError(403, "Không có quyền truy cập admin endpoint.");
   }
 
   return { actorId };
@@ -51,42 +76,54 @@ async function assertAdminAccess(req: { headers: Record<string, unknown> }): Pro
 
 async function assertElevatedAccess(
   req: { headers: Record<string, unknown> },
-  allowedRoles: string[] = ['ADMIN', 'PARTNER']
+  allowedRoles: string[] = ["ADMIN", "PARTNER"],
 ): Promise<{ actorId: string; role: string }> {
-  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : '';
-  const accessToken = authHeader.startsWith('Bearer ') ? authHeader.slice('Bearer '.length).trim() : '';
+  const authHeader =
+    typeof req.headers.authorization === "string"
+      ? req.headers.authorization
+      : "";
+  const accessToken = authHeader.startsWith("Bearer ")
+    ? authHeader.slice("Bearer ".length).trim()
+    : "";
 
   if (!accessToken) {
-    throw new ApiError(403, 'Không có quyền truy cập endpoint.');
+    throw new ApiError(403, "Không có quyền truy cập endpoint.");
   }
 
   const payload = verifyJwt(accessToken) as { sub?: string; role?: string };
   const isActive = await isAccessTokenSessionActive(accessToken);
-  if (!isActive || typeof payload.sub !== 'string' || !payload.sub.trim()) {
-    throw new ApiError(403, 'Phiên đăng nhập không hợp lệ.');
+  if (!isActive || typeof payload.sub !== "string" || !payload.sub.trim()) {
+    throw new ApiError(403, "Phiên đăng nhập không hợp lệ.");
   }
 
   const actorId = payload.sub.trim();
   const currentRole = await getCurrentUserRole(actorId);
 
   if (!currentRole || !allowedRoles.includes(currentRole)) {
-    throw new ApiError(403, 'Không quyền truy cập endpoint.');
+    throw new ApiError(403, "Không quyền truy cập endpoint.");
   }
 
   return { actorId, role: currentRole };
 }
 
-function getAdminActionContext(req: { headers: Record<string, unknown>; body?: unknown }) {
-  const actor = typeof req.headers['x-admin-actor'] === 'string' ? req.headers['x-admin-actor'] : undefined;
+function getAdminActionContext(req: {
+  headers: Record<string, unknown>;
+  body?: unknown;
+}) {
+  const actor =
+    typeof req.headers["x-admin-actor"] === "string"
+      ? req.headers["x-admin-actor"]
+      : undefined;
   const reason =
-    typeof (req.body as Record<string, unknown> | undefined)?.reason === 'string'
+    typeof (req.body as Record<string, unknown> | undefined)?.reason ===
+    "string"
       ? ((req.body as Record<string, unknown>).reason as string)
       : undefined;
 
   return {
     actor,
     reason,
-    source: 'api'
+    source: "api",
   };
 }
 
@@ -104,21 +141,21 @@ function getAdminActionContext(req: { headers: Record<string, unknown>; body?: u
  */
 
 router.post(
-  '/pois/:id/audio/generate',
+  "/pois/:id/audio/generate",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id cần generate audio.');
+      throw new ApiError(400, "Thiếu POI id cần generate audio.");
     }
 
     const result = await enqueuePoiTtsGeneration(poiId);
     return res.status(202).json({
-      message: 'Đã đưa tác vụ TTS vào queue.',
-      ...result
+      message: "Đã đưa tác vụ TTS vào queue.",
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -135,27 +172,28 @@ router.post(
  */
 
 router.post(
-  '/pois',
+  "/pois",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
     const result = await createAdminPoi(
       {
         ...(req.body ?? {}),
-        creatorId: auth.actorId
+        creatorId: auth.actorId,
       } as any,
       {
         actor: auth.actorId,
         reason,
-        source: 'admin-api'
-      }
+        source: "admin-api",
+      },
     );
 
     return res.status(201).json({
-      message: 'Tạo POI thành công.',
-      data: result
+      message: "Tạo POI thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 /**
@@ -174,24 +212,27 @@ router.post(
  */
 
 router.post(
-  '/pois/:id/publish',
+  "/pois/:id/publish",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id.');
+      throw new ApiError(400, "Thiếu POI id.");
     }
 
-    const result = await publishAdminPoi(poiId, getAdminActionContext(req as never));
+    const result = await publishAdminPoi(
+      poiId,
+      getAdminActionContext(req as never),
+    );
     const ttsResult = await enqueuePoiTtsGeneration(poiId);
 
     return res.status(200).json({
-      message: 'Publish POI thành công.',
+      message: "Publish POI thành công.",
       ...result,
-      ttsQueued: ttsResult.queued
+      ttsQueued: ttsResult.queued,
     });
-  })
+  }),
 );
 
 /**
@@ -206,16 +247,16 @@ router.post(
  */
 
 router.get(
-  '/pois',
+  "/pois",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
+    const auth = await assertElevatedAccess(req, ["ADMIN", "PARTNER"]);
 
     const items = await listAdminPois(auth);
     return res.status(200).json({
       items,
-      total: items.length
+      total: items.length,
     });
-  })
+  }),
 );
 
 /**
@@ -233,20 +274,20 @@ router.get(
  */
 
 router.get(
-  '/pois/:id',
+  "/pois/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
+    const auth = await assertElevatedAccess(req, ["ADMIN", "PARTNER"]);
 
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id.');
+      throw new ApiError(400, "Thiếu POI id.");
     }
 
     const result = await getAdminPoiById(poiId, auth);
     return res.status(200).json({
-      ...result
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -265,32 +306,28 @@ router.get(
  */
 
 router.put(
-  '/pois/:id',
+  "/pois/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
 
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id.');
+      throw new ApiError(400, "Thiếu POI id.");
     }
 
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
-    const result = await updateAdminPoi(
-      poiId,
-      req.body ?? {},
-      auth,
-      {
-        actor: auth.actorId,
-        reason,
-        source: 'admin-api'
-      }
-    );
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const result = await updateAdminPoi(poiId, req.body ?? {}, auth, {
+      actor: auth.actorId,
+      reason,
+      source: "admin-api",
+    });
 
     return res.status(200).json({
-      message: 'Cập nhật POI thành công.',
-      data: result
+      message: "Cập nhật POI thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 /**
@@ -310,31 +347,28 @@ router.put(
  */
 
 router.delete(
-  '/pois/:id',
+  "/pois/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
 
-    const poiId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!poiId) {
-      throw new ApiError(400, 'Thiếu POI id.');
+      throw new ApiError(400, "Thiếu POI id.");
     }
 
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
-    const result = await deleteAdminPoi(
-      poiId,
-      auth,
-      {
-        actor: auth.actorId,
-        reason,
-        source: 'admin-api'
-      }
-    );
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const result = await deleteAdminPoi(poiId, auth, {
+      actor: auth.actorId,
+      reason,
+      source: "admin-api",
+    });
 
     return res.status(200).json({
-      message: 'Xóa POI thành công.',
-      data: result
+      message: "Xóa POI thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 /**
@@ -351,27 +385,28 @@ router.delete(
  */
 
 router.post(
-  '/tours',
+  "/tours",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
     const result = await createAdminTour(
       {
         ...(req.body ?? {}),
-        creatorId: auth.actorId
+        creatorId: auth.actorId,
       } as any,
       {
         actor: auth.actorId,
         reason,
-        source: 'admin-api'
-      }
+        source: "admin-api",
+      },
     );
 
     return res.status(201).json({
-      message: 'Tạo Tour thành công.',
-      data: result
+      message: "Tạo Tour thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 /**
@@ -389,20 +424,21 @@ router.post(
  */
 
 router.get(
-  '/tours/:id',
+  "/tours/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['ADMIN', 'PARTNER']);
+    const auth = await assertElevatedAccess(req, ["ADMIN", "PARTNER"]);
 
-    const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const tourId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!tourId) {
-      throw new ApiError(400, 'Thiếu Tour id.');
+      throw new ApiError(400, "Thiếu Tour id.");
     }
 
     const result = await getAdminTourById(tourId, auth);
     return res.status(200).json({
-      ...result
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -421,32 +457,29 @@ router.get(
  */
 
 router.put(
-  '/tours/:id',
+  "/tours/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
 
-    const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const tourId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!tourId) {
-      throw new ApiError(400, 'Thiếu Tour id.');
+      throw new ApiError(400, "Thiếu Tour id.");
     }
 
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
-    const result = await updateAdminTour(
-      tourId,
-      req.body ?? {},
-      auth,
-      {
-        actor: auth.actorId,
-        reason,
-        source: 'admin-api'
-      }
-    );
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const result = await updateAdminTour(tourId, req.body ?? {}, auth, {
+      actor: auth.actorId,
+      reason,
+      source: "admin-api",
+    });
 
     return res.status(200).json({
-      message: 'Cập nhật Tour thành công.',
-      data: result
+      message: "Cập nhật Tour thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 /**
@@ -466,123 +499,131 @@ router.put(
  */
 
 router.delete(
-  '/tours/:id',
+  "/tours/:id",
   asyncHandler(async (req, res) => {
-    const auth = await assertElevatedAccess(req, ['PARTNER', 'ADMIN']);
+    const auth = await assertElevatedAccess(req, ["PARTNER", "ADMIN"]);
 
-    const tourId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const tourId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!tourId) {
-      throw new ApiError(400, 'Thiếu Tour id.');
+      throw new ApiError(400, "Thiếu Tour id.");
     }
 
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
-    const result = await deleteAdminTour(
-      tourId,
-      auth,
-      {
-        actor: auth.actorId,
-        reason,
-        source: 'admin-api'
-      }
-    );
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+    const result = await deleteAdminTour(tourId, auth, {
+      actor: auth.actorId,
+      reason,
+      source: "admin-api",
+    });
 
     return res.status(200).json({
-      message: 'Xóa Tour thành công.',
-      data: result
+      message: "Xóa Tour thành công.",
+      data: result,
     });
-  })
+  }),
 );
 
 router.get(
-  '/partner-registration-requests',
+  "/partner-registration-requests",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const status = typeof req.query.status === 'string' ? req.query.status : undefined;
+    const status =
+      typeof req.query.status === "string" ? req.query.status : undefined;
     const items = await listPartnerRegistrationRequests({ status });
 
     return res.status(200).json({
       items,
-      total: items.length
+      total: items.length,
     });
-  })
+  }),
 );
 
 router.get(
-  '/partner-registration-requests/:id',
+  "/partner-registration-requests/:id",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const requestId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!requestId) {
-      throw new ApiError(400, 'Thiếu partner registration request id.');
+      throw new ApiError(400, "Thiếu partner registration request id.");
     }
 
     const item = await getPartnerRegistrationRequestById(requestId);
     return res.status(200).json(item);
-  })
+  }),
 );
 
 router.post(
-  '/partner-registration-requests/:id/approve',
+  "/partner-registration-requests/:id/approve",
   asyncHandler(async (req, res) => {
     const auth = await assertAdminAccess(req);
 
-    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const requestId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!requestId) {
-      throw new ApiError(400, 'Thiếu partner registration request id.');
+      throw new ApiError(400, "Thiếu partner registration request id.");
     }
 
-    const decisionNote = typeof req.body?.decisionNote === 'string' ? req.body.decisionNote : undefined;
+    const decisionNote =
+      typeof req.body?.decisionNote === "string"
+        ? req.body.decisionNote
+        : undefined;
     const requestItem = await getPartnerRegistrationRequestById(requestId);
-    if (requestItem.status !== 'PENDING') {
-      throw new ApiError(409, 'Yêu cầu đã được xử lý trước đó.');
+    if (requestItem.status !== "PENDING") {
+      throw new ApiError(409, "Yêu cầu đã được xử lý trước đó.");
     }
 
     await assignAdminUserRole({
       actorId: auth.actorId,
       targetUserId: requestItem.requestedBy,
-      nextRole: 'PARTNER',
-      reason: decisionNote
+      nextRole: "PARTNER",
+      reason: decisionNote,
     });
 
     const item = await reviewPartnerRegistrationRequest({
       requestId,
       reviewerId: auth.actorId,
-      action: 'APPROVE',
-      decisionNote
+      action: "APPROVE",
+      decisionNote,
     });
 
     return res.status(200).json({
-      message: 'Đã duyệt đăng ký đối tác và cấp quyền PARTNER.',
-      ...item
+      message: "Đã duyệt đăng ký đối tác và cấp quyền PARTNER.",
+      ...item,
     });
-  })
+  }),
 );
 
 router.post(
-  '/partner-registration-requests/:id/reject',
+  "/partner-registration-requests/:id/reject",
   asyncHandler(async (req, res) => {
     const auth = await assertAdminAccess(req);
 
-    const requestId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
+    const requestId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
     if (!requestId) {
-      throw new ApiError(400, 'Thiếu partner registration request id.');
+      throw new ApiError(400, "Thiếu partner registration request id.");
     }
 
-    const decisionNote = typeof req.body?.decisionNote === 'string' ? req.body.decisionNote : undefined;
+    const decisionNote =
+      typeof req.body?.decisionNote === "string"
+        ? req.body.decisionNote
+        : undefined;
     const item = await reviewPartnerRegistrationRequest({
       requestId,
       reviewerId: auth.actorId,
-      action: 'REJECT',
-      decisionNote
+      action: "REJECT",
+      decisionNote,
     });
 
     return res.status(200).json({
-      message: 'Đã từ chối yêu cầu đăng ký đối tác.',
-      ...item
+      message: "Đã từ chối yêu cầu đăng ký đối tác.",
+      ...item,
     });
-  })
+  }),
 );
 
 /**
@@ -600,21 +641,25 @@ router.post(
  */
 
 router.post(
-  '/maintenance/pois/soft-delete-cleanup',
+  "/maintenance/pois/soft-delete-cleanup",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const dryRun = Boolean((req.body as Record<string, unknown> | undefined)?.dryRun);
+    const dryRun = Boolean(
+      (req.body as Record<string, unknown> | undefined)?.dryRun,
+    );
     const result = await purgeSoftDeletedPois({
       dryRun,
-      context: getAdminActionContext(req as never)
+      context: getAdminActionContext(req as never),
     });
 
     return res.status(200).json({
-      message: dryRun ? 'Đã chạy dry-run cleanup soft-delete.' : 'Đã chạy cleanup soft-delete.',
-      ...result
+      message: dryRun
+        ? "Đã chạy dry-run cleanup soft-delete."
+        : "Đã chạy cleanup soft-delete.",
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -629,16 +674,16 @@ router.post(
  */
 
 router.post(
-  '/sync/invalidate',
+  "/sync/invalidate",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
     const result = await invalidateSyncManifest();
     return res.status(200).json({
-      message: 'Đã invalidate sync manifest.',
-      ...result
+      message: "Đã invalidate sync manifest.",
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -653,13 +698,13 @@ router.post(
  */
 
 router.get(
-  '/tts/queue/status',
+  "/tts/queue/status",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
     const status = await getTtsQueueStatus();
     return res.status(200).json(status);
-  })
+  }),
 );
 
 /**
@@ -674,13 +719,13 @@ router.get(
  */
 
 router.get(
-  '/tts/config/validate',
+  "/tts/config/validate",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
     const validation = validateTtsRuntimeConfig();
     return res.status(validation.ok ? 200 : 500).json(validation);
-  })
+  }),
 );
 
 /**
@@ -696,17 +741,18 @@ router.get(
  * @return {object} 500 - Internal Server Error
  */
 router.get(
-  '/users',
+  "/users",
   asyncHandler(async (req, res) => {
     await assertAdminAccess(req);
 
-    const roleFilter = typeof req.query.role === 'string' ? req.query.role : undefined;
+    const roleFilter =
+      typeof req.query.role === "string" ? req.query.role : undefined;
     const items = await listAdminUsers({ role: roleFilter });
     return res.status(200).json({
       items,
-      total: items.length
+      total: items.length,
     });
-  })
+  }),
 );
 
 /**
@@ -727,34 +773,36 @@ router.get(
  * @return {object} 500 - Internal Server Error
  */
 router.post(
-  '/users/:id/role',
+  "/users/:id/role",
   asyncHandler(async (req, res) => {
     const auth = await assertAdminAccess(req);
 
-    const targetUserId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
-    const nextRole = typeof req.body?.role === 'string' ? req.body.role : '';
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+    const targetUserId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
+    const nextRole = typeof req.body?.role === "string" ? req.body.role : "";
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
 
     if (!targetUserId) {
-      throw new ApiError(400, 'Thiếu user id cần cập nhật role.');
+      throw new ApiError(400, "Thiếu user id cần cập nhật role.");
     }
 
     if (!nextRole) {
-      throw new ApiError(400, 'Thiếu role cần cập nhật.');
+      throw new ApiError(400, "Thiếu role cần cập nhật.");
     }
 
     const result = await assignAdminUserRole({
       actorId: auth.actorId,
       targetUserId,
       nextRole,
-      reason
+      reason,
     });
 
     return res.status(200).json({
-      message: 'Cập nhật role thành công.',
-      ...result
+      message: "Cập nhật role thành công.",
+      ...result,
     });
-  })
+  }),
 );
 
 /**
@@ -774,28 +822,117 @@ router.post(
  * @return {object} 500 - Internal Server Error
  */
 router.post(
-  '/users/:id/role/revoke',
+  "/users/:id/role/revoke",
   asyncHandler(async (req, res) => {
     const auth = await assertAdminAccess(req);
 
-    const targetUserId = typeof req.params.id === 'string' ? req.params.id.trim() : '';
-    const reason = typeof req.body?.reason === 'string' ? req.body.reason : undefined;
+    const targetUserId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
 
     if (!targetUserId) {
-      throw new ApiError(400, 'Thiếu user id cần thu hồi role.');
+      throw new ApiError(400, "Thiếu user id cần thu hồi role.");
     }
 
     const result = await revokeAdminUserRole({
       actorId: auth.actorId,
       targetUserId,
-      reason
+      reason,
     });
 
     return res.status(200).json({
-      message: 'Đã thu hồi role về USER.',
-      ...result
+      message: "Đã thu hồi role về USER.",
+      ...result,
     });
-  })
+  }),
+);
+
+/**
+ * POST /api/v1/admin/users/:id/lock
+ * @summary Lock a user account
+ * @description Lock target user by setting isActive=false. Cannot lock ADMIN role.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} id.path.required - User identifier
+ * @param {object} request.body - Lock payload
+ * @param {string} request.body.reason - Optional reason
+ * @return {object} 200 - User account locked
+ * @return {object} 400 - Invalid input
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - User not found
+ * @return {object} 409 - Guardrail violation
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  "/users/:id/lock",
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const targetUserId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+
+    if (!targetUserId) {
+      throw new ApiError(400, "Thiếu user id cần khóa tài khoản.");
+    }
+
+    const result = await setAdminUserAccessStatus({
+      actorId: auth.actorId,
+      targetUserId,
+      isActive: false,
+      reason,
+    });
+
+    return res.status(200).json({
+      message: "Đã khóa tài khoản người dùng.",
+      ...result,
+    });
+  }),
+);
+
+/**
+ * POST /api/v1/admin/users/:id/unlock
+ * @summary Unlock a user account
+ * @description Unlock target user by setting isActive=true.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} id.path.required - User identifier
+ * @param {object} request.body - Unlock payload
+ * @param {string} request.body.reason - Optional reason
+ * @return {object} 200 - User account unlocked
+ * @return {object} 400 - Invalid input
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - User not found
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  "/users/:id/unlock",
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const targetUserId =
+      typeof req.params.id === "string" ? req.params.id.trim() : "";
+    const reason =
+      typeof req.body?.reason === "string" ? req.body.reason : undefined;
+
+    if (!targetUserId) {
+      throw new ApiError(400, "Thiếu user id cần mở khóa tài khoản.");
+    }
+
+    const result = await setAdminUserAccessStatus({
+      actorId: auth.actorId,
+      targetUserId,
+      isActive: true,
+      reason,
+    });
+
+    return res.status(200).json({
+      message: "Đã mở khóa tài khoản người dùng.",
+      ...result,
+    });
+  }),
 );
 
 export default router;

@@ -103,19 +103,49 @@ export default function POIDetailPanel({ poi, onClose, autoPlayTrigger = 0 }) {
     return `${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
   };
 
-  useEffect(() => {
-    if (!autoPlayTrigger || !audioRef.current) return;
+  const tryPlayAudio = () => {
+    if (!audioRef.current) {
+      return;
+    }
 
     audioRef.current.playbackRate = playbackRateRef.current;
-    audioRef.current
-      .play()
-      .then(() => {
-        setIsPlaying(true);
-      })
-      .catch(() => {
-        setIsPlaying(false);
-      });
-  }, [autoPlayTrigger]);
+
+    const startPlayback = () => {
+      if (!audioRef.current) {
+        return;
+      }
+
+      audioRef.current
+        .play()
+        .then(() => {
+          setIsPlaying(true);
+        })
+        .catch(() => {
+          setIsPlaying(false);
+        });
+    };
+
+    // If media is not ready yet, retry once it can play.
+    if (audioRef.current.readyState < 2) {
+      const handleCanPlay = () => {
+        audioRef.current?.removeEventListener("canplay", handleCanPlay);
+        startPlayback();
+      };
+
+      audioRef.current.addEventListener("canplay", handleCanPlay);
+      audioRef.current.load();
+      return;
+    }
+
+    startPlayback();
+  };
+
+  useEffect(() => {
+    if (!autoPlayTrigger || !audioRef.current || !poi.audioUrl) return;
+
+    audioRef.current.currentTime = 0;
+    tryPlayAudio();
+  }, [autoPlayTrigger, poi.audioUrl]);
 
   useEffect(() => {
     if (!isPlaying || !audioRef.current) {
@@ -147,6 +177,17 @@ export default function POIDetailPanel({ poi, onClose, autoPlayTrigger = 0 }) {
     if (!audioRef.current) return;
     audioRef.current.volume = volume;
   }, [volume]);
+
+  // Reset audio when audioUrl changes (e.g., language change)
+  useEffect(() => {
+    if (!audioRef.current || !poi.audioUrl) return;
+
+    // Pause and reset audio playback
+    audioRef.current.pause();
+    audioRef.current.currentTime = 0;
+    // Force reload the audio element with new src
+    audioRef.current.load();
+  }, [poi.audioUrl]);
 
   const handleClose = () => {
     if (audioRef.current) {

@@ -1,6 +1,8 @@
 import { v2 as cloudinary } from "cloudinary";
 import prisma from "../lib/prisma";
 
+type CloudinaryResourceType = "image" | "video" | "raw";
+
 export interface UploadPoiImageResult {
   poiId: string;
   imageUrl: string;
@@ -147,6 +149,42 @@ export async function removeCloudinaryImageByUrl(
   });
 
   return true;
+}
+
+export async function removeCloudinaryAssetByUrl(
+  assetUrl: string | null | undefined,
+  resourceTypes: CloudinaryResourceType[] = ["image"],
+): Promise<boolean> {
+  if (!assetUrl) {
+    return false;
+  }
+
+  ensureCloudinaryConfig();
+
+  const publicId = extractCloudinaryPublicId(assetUrl);
+  if (!publicId) {
+    return false;
+  }
+
+  for (const resourceType of resourceTypes) {
+    const result = await cloudinary.uploader.destroy(publicId, {
+      resource_type: resourceType,
+      invalidate: true,
+    });
+
+    if (result?.result === "ok") {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+export async function removeCloudinaryAudioByUrl(
+  audioUrl: string | null | undefined,
+): Promise<boolean> {
+  // Audio uploaded with resource_type "auto" may be stored as video/raw.
+  return removeCloudinaryAssetByUrl(audioUrl, ["video", "raw", "image"]);
 }
 
 function uploadImageBufferToCloudinary(

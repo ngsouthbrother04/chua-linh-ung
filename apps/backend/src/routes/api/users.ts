@@ -142,29 +142,8 @@ const handleTtsPreview = asyncHandler(async (req: AuthRequest, res) => {
       throw new ApiError(400, "Ngôn ngữ TTS chưa được hỗ trợ.");
     }
 
-    if (message === "PIPER_MODEL_NOT_CONFIGURED") {
-      throw new ApiError(500, "TTS chưa được cấu hình model giọng đọc.");
-    }
-
-    if (message === "PIPER_MODEL_FILE_NOT_FOUND") {
-      throw new ApiError(
-        500,
-        "Không tìm thấy file model Piper cho ngôn ngữ đã chọn.",
-      );
-    }
-
-    if (message === "PIPER_BIN_NOT_FOUND") {
-      throw new ApiError(
-        500,
-        "Không tìm thấy chương trình piper. Hãy cài Piper hoặc cấu hình PIPER_BIN đúng đường dẫn.",
-      );
-    }
-
-    if (
-      message.startsWith("PIPER_PROCESS_EXIT_") ||
-      message.startsWith("PIPER_EXECUTION_FAILED")
-    ) {
-      throw new ApiError(500, "TTS runtime lỗi khi sinh audio.");
+    if (message.startsWith("GOOGLE_TTS_") || message.startsWith("TTS_")) {
+      throw new ApiError(500, "Google TTS runtime lỗi khi sinh audio.");
     }
 
     throw new ApiError(500, "Không thể tạo audio test từ mô tả.");
@@ -180,8 +159,10 @@ router.post(
   requireAuth,
   asyncHandler(async (req: AuthRequest, res) => {
     const userId = requireUserId(req);
-    const shopName = typeof req.body?.shopName === "string" ? req.body.shopName : "";
-    const shopAddress = typeof req.body?.shopAddress === "string" ? req.body.shopAddress : "";
+    const shopName =
+      typeof req.body?.shopName === "string" ? req.body.shopName : "";
+    const shopAddress =
+      typeof req.body?.shopAddress === "string" ? req.body.shopAddress : "";
     const note = typeof req.body?.note === "string" ? req.body.note : undefined;
 
     const item = await createPartnerRegistrationRequest({

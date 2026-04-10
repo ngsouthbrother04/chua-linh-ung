@@ -1,16 +1,16 @@
-import crypto from 'crypto';
-import bcrypt from 'bcryptjs';
-import prisma from '../lib/prisma';
-import { PaymentProvider, PaymentStatus } from '../generated/prisma/client';
+import crypto from "crypto";
+import bcrypt from "bcryptjs";
+import prisma from "../lib/prisma";
+import { PaymentProvider, PaymentStatus } from "../generated/prisma/client";
 
-export type UserRole = 'USER' | 'PARTNER' | 'ADMIN';
+export type UserRole = "USER" | "PARTNER" | "ADMIN";
 
 export interface ClaimAuthResult {
   token: string;
   accessToken: string;
-  tokenType: 'Bearer';
+  tokenType: "Bearer";
   expiresIn: number;
-  method: 'claim_code';
+  method: "claim_code";
   role: UserRole;
   deviceId?: string;
   refreshToken: string;
@@ -32,8 +32,8 @@ export interface PaymentInitiateResult {
   transactionId: string;
   provider: PaymentProvider;
   amount: number;
-  currency: 'VND';
-  status: 'PENDING';
+  currency: "VND";
+  status: "PENDING";
   paymentUrl: string;
   expiresAt: string;
   expiresIn: number;
@@ -41,7 +41,7 @@ export interface PaymentInitiateResult {
 
 export interface PaymentFinalizeInput {
   transactionId: string;
-  status: 'success' | 'failed' | 'cancelled';
+  status: "success" | "failed" | "cancelled";
   idempotencyKey: string;
   signatureHash: string;
   deviceId?: string;
@@ -62,7 +62,7 @@ export interface PaymentFinalizeResult {
 export interface RefreshAuthResult {
   token: string;
   accessToken: string;
-  tokenType: 'Bearer';
+  tokenType: "Bearer";
   expiresIn: number;
   role: UserRole;
   refreshToken: string;
@@ -77,29 +77,36 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
-const DEFAULT_CLAIM_CODES = ['ABC123', 'FOODIE2026', 'LINHUNGVIP'];
+const DEFAULT_CLAIM_CODES = ["ABC123", "FOODIE2026", "LINHUNGVIP"];
 
-const TOKEN_TTL_SECONDS = Number(process.env.AUTH_TOKEN_TTL_SECONDS ?? 24 * 60 * 60);
-const REFRESH_TOKEN_TTL_SECONDS = Number(process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS ?? 30 * 24 * 60 * 60);
+const TOKEN_TTL_SECONDS = Number(
+  process.env.AUTH_TOKEN_TTL_SECONDS ?? 24 * 60 * 60,
+);
+const REFRESH_TOKEN_TTL_SECONDS = Number(
+  process.env.AUTH_REFRESH_TOKEN_TTL_SECONDS ?? 30 * 24 * 60 * 60,
+);
 
-const TOKEN_SECRET = process.env.AUTH_JWT_SECRET ?? 'dev-only-auth-secret-change-me';
+const TOKEN_SECRET =
+  process.env.AUTH_JWT_SECRET ?? "dev-only-auth-secret-change-me";
 const TOKEN_SECRETS = process.env.AUTH_JWT_SECRETS
-  ? process.env.AUTH_JWT_SECRETS.split(',').map(s => s.trim()).filter(Boolean)
+  ? process.env.AUTH_JWT_SECRETS.split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
   : [TOKEN_SECRET];
-const CURRENT_KID = process.env.AUTH_JWT_KID ?? '1';
+const CURRENT_KID = process.env.AUTH_JWT_KID ?? "1";
 const revokedAccessTokenJtis = new Map<string, number>();
 const revokedUserAccessAfterIat = new Map<string, number>();
 
 function base64UrlEncode(input: string): string {
   return Buffer.from(input)
-    .toString('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+    .toString("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 }
 
 function signJwt(payload: Record<string, unknown>): string {
-  const header = { alg: 'HS256', typ: 'JWT', kid: CURRENT_KID };
+  const header = { alg: "HS256", typ: "JWT", kid: CURRENT_KID };
   const encodedHeader = base64UrlEncode(JSON.stringify(header));
   const encodedPayload = base64UrlEncode(JSON.stringify(payload));
   const data = `${encodedHeader}.${encodedPayload}`;
@@ -107,12 +114,12 @@ function signJwt(payload: Record<string, unknown>): string {
   const activeSecret = TOKEN_SECRETS[0] ?? TOKEN_SECRET;
 
   const signature = crypto
-    .createHmac('sha256', activeSecret)
+    .createHmac("sha256", activeSecret)
     .update(data)
-    .digest('base64')
-    .replace(/=/g, '')
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_');
+    .digest("base64")
+    .replace(/=/g, "")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_");
 
   return `${data}.${signature}`;
 }
@@ -127,31 +134,33 @@ function pruneRevokedAccessTokens(): void {
 }
 
 function toUserRole(value: unknown): UserRole {
-  if (value === 'ADMIN' || value === 'PARTNER' || value === 'USER') {
+  if (value === "ADMIN" || value === "PARTNER" || value === "USER") {
     return value;
   }
 
-  return 'USER';
+  return "USER";
 }
 
 function roleFromClaimCodeType(codeType?: string | null): UserRole {
   if (!codeType) {
-    return 'USER';
+    return "USER";
   }
 
   const normalized = codeType.trim().toUpperCase();
-  if (normalized === 'ADMIN' || normalized === 'ADMIN_CODE') {
-    return 'ADMIN';
+  if (normalized === "ADMIN" || normalized === "ADMIN_CODE") {
+    return "ADMIN";
   }
 
-  if (normalized === 'PARTNER' || normalized === 'PARTNER_CODE') {
-    return 'PARTNER';
+  if (normalized === "PARTNER" || normalized === "PARTNER_CODE") {
+    return "PARTNER";
   }
 
-  return 'USER';
+  return "USER";
 }
 
-async function fetchPersistedUserRole(userId: string): Promise<UserRole | null> {
+async function fetchPersistedUserRole(
+  userId: string,
+): Promise<UserRole | null> {
   try {
     const rows = await prisma.$queryRaw<Array<{ role: string }>>`
       SELECT role::text AS role
@@ -183,7 +192,7 @@ async function resolveUserRole(input: {
   if (input.claimCodeId) {
     const claimCode = await prisma.claimCode.findUnique({
       where: { id: input.claimCodeId },
-      select: { codeType: true }
+      select: { codeType: true },
     });
 
     if (claimCode?.codeType) {
@@ -191,10 +200,13 @@ async function resolveUserRole(input: {
     }
   }
 
-  return input.fallbackRole ?? 'USER';
+  return input.fallbackRole ?? "USER";
 }
 
-async function syncUserRoleByClaimCode(userId: string, claimCodeId?: string | null): Promise<UserRole> {
+async function syncUserRoleByClaimCode(
+  userId: string,
+  claimCodeId?: string | null,
+): Promise<UserRole> {
   const role = await resolveUserRole({ userId, claimCodeId });
 
   try {
@@ -210,7 +222,11 @@ async function syncUserRoleByClaimCode(userId: string, claimCodeId?: string | nu
   return role;
 }
 
-function createRefreshToken(subject: string, role: UserRole, sessionId?: string): { token: string; expiresIn: number; jti: string } {
+function createRefreshToken(
+  subject: string,
+  role: UserRole,
+  sessionId?: string,
+): { token: string; expiresIn: number; jti: string } {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jti = crypto.randomUUID();
   const payload = {
@@ -220,20 +236,20 @@ function createRefreshToken(subject: string, role: UserRole, sessionId?: string)
     exp: nowSeconds + REFRESH_TOKEN_TTL_SECONDS,
     jti,
     sid: sessionId,
-    typ: 'refresh'
+    typ: "refresh",
   };
 
   return {
     token: signJwt(payload),
     expiresIn: REFRESH_TOKEN_TTL_SECONDS,
-    jti
+    jti,
   };
 }
 
 export function verifyJwt(token: string): any {
-  const parts = token.split('.');
+  const parts = token.split(".");
   if (parts.length !== 3) {
-    throw new Error('INVALID_TOKEN_FORMAT');
+    throw new Error("INVALID_TOKEN_FORMAT");
   }
 
   const [encodedHeader, encodedPayload, signature] = parts;
@@ -241,24 +257,32 @@ export function verifyJwt(token: string): any {
 
   let payloadObj;
   try {
-    payloadObj = JSON.parse(Buffer.from(encodedPayload.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf8'));
+    payloadObj = JSON.parse(
+      Buffer.from(
+        encodedPayload.replace(/-/g, "+").replace(/_/g, "/"),
+        "base64",
+      ).toString("utf8"),
+    );
   } catch (err) {
-    throw new Error('INVALID_TOKEN_ENCODING');
+    throw new Error("INVALID_TOKEN_ENCODING");
   }
 
   let isValid = false;
   // Key Rotation Vault Check
   for (const secret of TOKEN_SECRETS) {
     const expectedSignature = crypto
-      .createHmac('sha256', secret)
+      .createHmac("sha256", secret)
       .update(data)
-      .digest('base64')
-      .replace(/=/g, '')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_');
+      .digest("base64")
+      .replace(/=/g, "")
+      .replace(/\+/g, "-")
+      .replace(/\//g, "_");
 
     try {
-      isValid = crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+      isValid = crypto.timingSafeEqual(
+        Buffer.from(signature),
+        Buffer.from(expectedSignature),
+      );
       if (isValid) break;
     } catch {
       continue;
@@ -266,12 +290,12 @@ export function verifyJwt(token: string): any {
   }
 
   if (!isValid) {
-    throw new Error('INVALID_SIGNATURE');
+    throw new Error("INVALID_SIGNATURE");
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   if (payloadObj.exp && payloadObj.exp < nowSeconds) {
-    throw new Error('TOKEN_EXPIRED');
+    throw new Error("TOKEN_EXPIRED");
   }
 
   return payloadObj;
@@ -281,7 +305,11 @@ function toSafeClaimCode(rawCode: string): string {
   return rawCode.trim().toUpperCase();
 }
 
-export function createAuthToken(subject: string, sessionId?: string, role: UserRole = 'USER'): { token: string; expiresIn: number; jti: string } {
+export function createAuthToken(
+  subject: string,
+  sessionId?: string,
+  role: UserRole = "USER",
+): { token: string; expiresIn: number; jti: string } {
   const nowSeconds = Math.floor(Date.now() / 1000);
   const jti = crypto.randomUUID();
   const payload = {
@@ -291,13 +319,13 @@ export function createAuthToken(subject: string, sessionId?: string, role: UserR
     exp: nowSeconds + TOKEN_TTL_SECONDS,
     jti,
     sid: sessionId,
-    typ: 'access'
+    typ: "access",
   };
 
   return {
     token: signJwt(payload),
     expiresIn: TOKEN_TTL_SECONDS,
-    jti
+    jti,
   };
 }
 
@@ -314,27 +342,26 @@ async function issueAuthPair(input: {
   return {
     token: access.token,
     accessToken: access.token,
-    tokenType: 'Bearer',
+    tokenType: "Bearer",
     expiresIn: access.expiresIn,
-    method: 'claim_code',
+    method: "claim_code",
     role: input.role,
     deviceId: input.deviceId,
     refreshToken: refresh.token,
     refreshExpiresIn: refresh.expiresIn,
-    sessionId
+    sessionId,
   };
 }
 
 async function seedDefaultClaimCodes(): Promise<void> {
-  const fromEnv = process.env.AUTH_CLAIM_CODES
-    ?.split(',')
+  const fromEnv = process.env.AUTH_CLAIM_CODES?.split(",")
     .map((code) => code.trim().toUpperCase())
     .filter(Boolean);
 
   const source = fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_CLAIM_CODES;
   await prisma.claimCode.createMany({
     data: source.map((code) => ({ code })),
-    skipDuplicates: true
+    skipDuplicates: true,
   });
 }
 
@@ -343,7 +370,7 @@ export async function registerUser(input: any): Promise<ClaimAuthResult> {
 
   const existingUser = await prisma.user.findUnique({ where: { email } });
   if (existingUser) {
-    throw new Error('EMAIL_EXISTS');
+    throw new Error("EMAIL_EXISTS");
   }
 
   const salt = await bcrypt.genSalt(10);
@@ -354,20 +381,20 @@ export async function registerUser(input: any): Promise<ClaimAuthResult> {
       email,
       passwordHash,
       fullName,
-      deviceId
-    }
+      deviceId,
+    },
   });
 
   const role = await resolveUserRole({
     userId: user.id,
     claimCodeId: user.claimCodeId,
-    fallbackRole: 'USER'
+    fallbackRole: "USER",
   });
 
   return issueAuthPair({
     subject: user.id,
     role,
-    deviceId
+    deviceId,
   });
 }
 
@@ -376,63 +403,72 @@ export async function loginUser(input: any): Promise<ClaimAuthResult> {
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user) {
-    throw new Error('INVALID_CREDENTIALS');
+    throw new Error("INVALID_CREDENTIALS");
+  }
+
+  if (!user.isActive) {
+    throw new Error("ACCOUNT_LOCKED");
   }
 
   const isMatch = await bcrypt.compare(password, user.passwordHash);
   if (!isMatch) {
-    throw new Error('INVALID_CREDENTIALS');
+    throw new Error("INVALID_CREDENTIALS");
   }
 
   if (deviceId && user.deviceId !== deviceId) {
     // Optionally update the deviceId
     await prisma.user.update({
       where: { id: user.id },
-      data: { deviceId }
+      data: { deviceId },
     });
   }
 
   const role = await resolveUserRole({
     userId: user.id,
     claimCodeId: user.claimCodeId,
-    fallbackRole: 'USER'
+    fallbackRole: "USER",
   });
 
   return issueAuthPair({
     subject: user.id,
     role,
-    deviceId
+    deviceId,
   });
 }
 
-export async function changeUserPassword(input: ChangePasswordInput): Promise<void> {
+export async function changeUserPassword(
+  input: ChangePasswordInput,
+): Promise<void> {
   const userId = input.userId?.trim();
-  const currentPassword = input.currentPassword ?? '';
-  const newPassword = input.newPassword ?? '';
+  const currentPassword = input.currentPassword ?? "";
+  const newPassword = input.newPassword ?? "";
 
   if (!userId || !currentPassword || !newPassword) {
-    throw new Error('INVALID_PASSWORD_PAYLOAD');
+    throw new Error("INVALID_PASSWORD_PAYLOAD");
   }
 
   if (newPassword.length < 6) {
-    throw new Error('PASSWORD_TOO_SHORT');
+    throw new Error("PASSWORD_TOO_SHORT");
   }
 
   const user = await prisma.user.findUnique({
     where: { id: userId },
     select: {
       id: true,
-      passwordHash: true
-    }
+      passwordHash: true,
+    },
   });
 
   if (!user) {
-    throw new Error('USER_NOT_FOUND');
+    throw new Error("USER_NOT_FOUND");
   }
 
-  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.passwordHash);
+  const isCurrentPasswordValid = await bcrypt.compare(
+    currentPassword,
+    user.passwordHash,
+  );
   if (!isCurrentPasswordValid) {
-    throw new Error('INVALID_CURRENT_PASSWORD');
+    throw new Error("INVALID_CURRENT_PASSWORD");
   }
 
   const nextSalt = await bcrypt.genSalt(10);
@@ -441,18 +477,21 @@ export async function changeUserPassword(input: ChangePasswordInput): Promise<vo
   await prisma.user.update({
     where: { id: user.id },
     data: {
-      passwordHash: nextPasswordHash
-    }
+      passwordHash: nextPasswordHash,
+    },
   });
 
   await revokeAllUserAccessTokens(user.id);
 }
 
-export async function redeemClaimCode(userId: string, claimCode: string): Promise<{ success: boolean; message: string }> {
+export async function redeemClaimCode(
+  userId: string,
+  claimCode: string,
+): Promise<{ success: boolean; message: string }> {
   const normalizedCode = toSafeClaimCode(claimCode);
 
   if (!/^[A-Z0-9_-]{4,32}$/.test(normalizedCode)) {
-    throw new Error('INVALID_CLAIM_CODE');
+    throw new Error("INVALID_CLAIM_CODE");
   }
 
   await seedDefaultClaimCodes();
@@ -460,47 +499,56 @@ export async function redeemClaimCode(userId: string, claimCode: string): Promis
   const updated = await prisma.claimCode.updateMany({
     where: {
       code: normalizedCode,
-      isUsed: false
+      isUsed: false,
     },
     data: {
       isUsed: true,
       usedAt: new Date(),
-      usedBy: `user:${userId}`
-    }
+      usedBy: `user:${userId}`,
+    },
   });
 
   if (updated.count === 0) {
-    throw new Error('CLAIM_CODE_NOT_FOUND_OR_USED');
+    throw new Error("CLAIM_CODE_NOT_FOUND_OR_USED");
   }
 
   const codeRecord = await prisma.claimCode.findUnique({
     where: { code: normalizedCode },
-    select: { id: true, codeType: true }
+    select: { id: true, codeType: true },
   });
 
   await prisma.user.update({
     where: { id: userId },
-    data: { claimCodeId: codeRecord?.id }
+    data: { claimCodeId: codeRecord?.id },
   });
 
   await syncUserRoleByClaimCode(userId, codeRecord?.id);
 
-  return { success: true, message: 'Nhập mã thành công. Bạn đã trở thành hội viên Premium.' };
+  return {
+    success: true,
+    message: "Nhập mã thành công. Bạn đã trở thành hội viên Premium.",
+  };
 }
 
-export async function initiatePayment(input: PaymentInitiateInput): Promise<PaymentInitiateResult> {
+export async function initiatePayment(
+  input: PaymentInitiateInput,
+): Promise<PaymentInitiateResult> {
   if (!Number.isFinite(input.amount) || input.amount <= 0) {
-    throw new Error('INVALID_PAYMENT_AMOUNT');
+    throw new Error("INVALID_PAYMENT_AMOUNT");
   }
 
-  const transactionId = `txn_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
+  const transactionId = `txn_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   const expiresIn = 15 * 60;
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-  const paymentGatewayBaseUrl = process.env.PAYMENT_GATEWAY_BASE_URL ?? 'https://sandbox.payments.local';
-  const callbackUrl = input.returnUrl ?? process.env.PAYMENT_RETURN_URL ?? 'phoamthuc://payment-callback';
+  const paymentGatewayBaseUrl =
+    process.env.PAYMENT_GATEWAY_BASE_URL ?? "https://sandbox.payments.local";
+  const callbackUrl =
+    input.returnUrl ??
+    process.env.PAYMENT_RETURN_URL ??
+    "phoamthuc://payment-callback";
   const paymentUrl = `${paymentGatewayBaseUrl}/${input.provider}?transactionId=${encodeURIComponent(
-    transactionId
+    transactionId,
   )}&amount=${encodeURIComponent(input.amount.toString())}&returnUrl=${encodeURIComponent(callbackUrl)}`;
 
   const created = await prisma.paymentTransaction.create({
@@ -509,12 +557,12 @@ export async function initiatePayment(input: PaymentInitiateInput): Promise<Paym
       userId: input.userId,
       provider: input.provider,
       amount: input.amount,
-      currency: 'VND',
-      status: 'PENDING',
+      currency: "VND",
+      status: "PENDING",
       returnUrl: callbackUrl,
       paymentUrl,
-      expiresAt: new Date(expiresAt)
-    }
+      expiresAt: new Date(expiresAt),
+    },
   });
 
   return {
@@ -522,40 +570,48 @@ export async function initiatePayment(input: PaymentInitiateInput): Promise<Paym
     transactionId: created.transactionId,
     provider: created.provider,
     amount: created.amount,
-    currency: 'VND',
-    status: 'PENDING',
+    currency: "VND",
+    status: "PENDING",
     paymentUrl: created.paymentUrl,
     expiresAt: created.expiresAt.toISOString(),
-    expiresIn
+    expiresIn,
   };
 }
 
-export async function finalizePayment(input: PaymentFinalizeInput): Promise<PaymentFinalizeResult> {
+export async function finalizePayment(
+  input: PaymentFinalizeInput,
+): Promise<PaymentFinalizeResult> {
   const mappedStatus: PaymentStatus =
-    input.status === 'success'
-      ? 'SUCCEEDED'
-      : input.status === 'failed'
-        ? 'FAILED'
-        : 'CANCELLED';
+    input.status === "success"
+      ? "SUCCEEDED"
+      : input.status === "failed"
+        ? "FAILED"
+        : "CANCELLED";
 
   const existingCallback = await prisma.paymentCallbackEvent.findUnique({
-    where: { idempotencyKey: input.idempotencyKey }
+    where: { idempotencyKey: input.idempotencyKey },
   });
 
   if (existingCallback) {
     const existingPayment = await prisma.paymentTransaction.findUnique({
-      where: { transactionId: existingCallback.transactionId }
+      where: { transactionId: existingCallback.transactionId },
     });
 
     if (!existingPayment) {
-      throw new Error('PAYMENT_NOT_FOUND');
+      throw new Error("PAYMENT_NOT_FOUND");
     }
 
-    if (existingPayment.status === 'SUCCEEDED') {
+    if (existingPayment.status === "SUCCEEDED") {
       const pair = await issueAuthPair({
-        subject: existingPayment.userId || `payment:${existingPayment.transactionId}`,
-        role: existingPayment.userId ? await resolveUserRole({ userId: existingPayment.userId, fallbackRole: 'USER' }) : 'USER',
-        deviceId: input.deviceId ?? `payment:${existingPayment.transactionId}`
+        subject:
+          existingPayment.userId || `payment:${existingPayment.transactionId}`,
+        role: existingPayment.userId
+          ? await resolveUserRole({
+              userId: existingPayment.userId,
+              fallbackRole: "USER",
+            })
+          : "USER",
+        deviceId: input.deviceId ?? `payment:${existingPayment.transactionId}`,
       });
       return {
         orderId: existingPayment.transactionId,
@@ -566,7 +622,7 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
         refreshToken: pair.refreshToken,
         refreshExpiresIn: pair.refreshExpiresIn,
         sessionId: pair.sessionId,
-        deviceId: input.deviceId
+        deviceId: input.deviceId,
       };
     }
 
@@ -574,29 +630,31 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
       orderId: existingPayment.transactionId,
       status: existingPayment.status,
       idempotent: true,
-      deviceId: input.deviceId
+      deviceId: input.deviceId,
     };
   }
 
   const existing = await prisma.paymentTransaction.findUnique({
-    where: { transactionId: input.transactionId }
+    where: { transactionId: input.transactionId },
   });
 
   if (!existing) {
-    throw new Error('PAYMENT_NOT_FOUND');
+    throw new Error("PAYMENT_NOT_FOUND");
   }
 
   if (
-    (existing.status === 'SUCCEEDED' || existing.status === 'FAILED' || existing.status === 'CANCELLED') &&
+    (existing.status === "SUCCEEDED" ||
+      existing.status === "FAILED" ||
+      existing.status === "CANCELLED") &&
     existing.status !== mappedStatus
   ) {
-    throw new Error('PAYMENT_ALREADY_FINALIZED');
+    throw new Error("PAYMENT_ALREADY_FINALIZED");
   }
 
   const updated = await prisma.$transaction(async (tx: any) => {
     const payment = await tx.paymentTransaction.update({
       where: { transactionId: input.transactionId },
-      data: { status: mappedStatus }
+      data: { status: mappedStatus },
     });
 
     await tx.paymentCallbackEvent.create({
@@ -606,26 +664,28 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
         provider: payment.provider,
         callbackData: {},
         signatureHash: input.signatureHash,
-        status: mappedStatus
-      }
+        status: mappedStatus,
+      },
     });
 
     return payment;
   });
 
-  if (mappedStatus !== 'SUCCEEDED') {
+  if (mappedStatus !== "SUCCEEDED") {
     return {
       orderId: updated.transactionId,
       status: mappedStatus,
       idempotent: false,
-      deviceId: input.deviceId
+      deviceId: input.deviceId,
     };
   }
 
   const issued = await issueAuthPair({
     subject: updated.userId || `payment:${updated.transactionId}`,
-    role: updated.userId ? await resolveUserRole({ userId: updated.userId, fallbackRole: 'USER' }) : 'USER',
-    deviceId: input.deviceId ?? `payment:${updated.transactionId}`
+    role: updated.userId
+      ? await resolveUserRole({ userId: updated.userId, fallbackRole: "USER" })
+      : "USER",
+    deviceId: input.deviceId ?? `payment:${updated.transactionId}`,
   });
 
   return {
@@ -637,60 +697,83 @@ export async function finalizePayment(input: PaymentFinalizeInput): Promise<Paym
     refreshToken: issued.refreshToken,
     refreshExpiresIn: issued.refreshExpiresIn,
     sessionId: issued.sessionId,
-    deviceId: input.deviceId
+    deviceId: input.deviceId,
   };
 }
 
-export async function refreshAuthSession(rawToken: string): Promise<RefreshAuthResult> {
+export async function refreshAuthSession(
+  rawToken: string,
+): Promise<RefreshAuthResult> {
   const candidate = rawToken.trim();
   if (!candidate) {
-    throw new Error('INVALID_REFRESH_TOKEN');
+    throw new Error("INVALID_REFRESH_TOKEN");
   }
 
   const payload = verifyJwt(candidate);
-  const typ = typeof payload.typ === 'string' ? payload.typ : '';
+  const typ = typeof payload.typ === "string" ? payload.typ : "";
 
-  if (typ !== 'refresh') {
-    throw new Error('INVALID_REFRESH_TOKEN');
+  if (typ !== "refresh") {
+    throw new Error("INVALID_REFRESH_TOKEN");
   }
 
-  const subject = typeof payload.sub === 'string' && payload.sub ? payload.sub : 'refresh-token';
+  const subject =
+    typeof payload.sub === "string" && payload.sub
+      ? payload.sub
+      : "refresh-token";
   const roleFromToken = toUserRole(payload.role);
-  if (typeof payload.exp === 'number' && payload.exp * 1000 <= Date.now()) {
-    throw new Error('INVALID_REFRESH_TOKEN');
+  if (typeof payload.exp === "number" && payload.exp * 1000 <= Date.now()) {
+    throw new Error("INVALID_REFRESH_TOKEN");
   }
 
-  const resolvedRole = subject.startsWith('payment:')
+  const resolvedRole = subject.startsWith("payment:")
     ? roleFromToken
     : await resolveUserRole({
         userId: subject,
-        fallbackRole: roleFromToken
+        fallbackRole: roleFromToken,
       });
+
+  if (!subject.startsWith("payment:")) {
+    const rows = await prisma.$queryRaw<Array<{ is_active: boolean }>>`
+      SELECT is_active
+      FROM users
+      WHERE id = ${subject}
+      LIMIT 1
+    `;
+
+    if (!rows[0] || !rows[0].is_active) {
+      throw new Error("ACCOUNT_LOCKED");
+    }
+  }
 
   return issueAuthPair({
     subject,
     role: resolvedRole,
-    deviceId: typeof payload.sid === 'string' ? payload.sid : undefined,
-    sessionId: typeof payload.sid === 'string' ? payload.sid : undefined
+    deviceId: typeof payload.sid === "string" ? payload.sid : undefined,
+    sessionId: typeof payload.sid === "string" ? payload.sid : undefined,
   });
 }
 
-export async function revokeAuthSessionByAccessToken(token: string): Promise<void> {
+export async function revokeAuthSessionByAccessToken(
+  token: string,
+): Promise<void> {
   const payload = verifyJwt(token);
-  const jti = typeof payload.jti === 'string' ? payload.jti : '';
+  const jti = typeof payload.jti === "string" ? payload.jti : "";
 
   if (!jti) {
-    throw new Error('INVALID_SESSION');
+    throw new Error("INVALID_SESSION");
   }
 
-  const expiresAt = typeof payload.exp === 'number' ? payload.exp * 1000 : Date.now() + TOKEN_TTL_SECONDS * 1000;
+  const expiresAt =
+    typeof payload.exp === "number"
+      ? payload.exp * 1000
+      : Date.now() + TOKEN_TTL_SECONDS * 1000;
   revokedAccessTokenJtis.set(jti, expiresAt);
 }
 
 export async function revokeAllUserAccessTokens(userId: string): Promise<void> {
-  const normalized = typeof userId === 'string' ? userId.trim() : '';
+  const normalized = typeof userId === "string" ? userId.trim() : "";
   if (!normalized) {
-    throw new Error('INVALID_USER_ID');
+    throw new Error("INVALID_USER_ID");
   }
 
   const nowSeconds = Math.floor(Date.now() / 1000);
@@ -707,8 +790,10 @@ export async function revokeAllUserAccessTokens(userId: string): Promise<void> {
   }
 }
 
-export async function getCurrentUserRole(userId: string): Promise<UserRole | null> {
-  const normalized = typeof userId === 'string' ? userId.trim() : '';
+export async function getCurrentUserRole(
+  userId: string,
+): Promise<UserRole | null> {
+  const normalized = typeof userId === "string" ? userId.trim() : "";
   if (!normalized) {
     return null;
   }
@@ -716,10 +801,12 @@ export async function getCurrentUserRole(userId: string): Promise<UserRole | nul
   return fetchPersistedUserRole(normalized);
 }
 
-export async function isAccessTokenSessionActive(token: string): Promise<boolean> {
+export async function isAccessTokenSessionActive(
+  token: string,
+): Promise<boolean> {
   try {
     const payload = verifyJwt(token);
-    const jti = typeof payload.jti === 'string' ? payload.jti : '';
+    const jti = typeof payload.jti === "string" ? payload.jti : "";
 
     if (!jti) {
       return false;
@@ -730,22 +817,28 @@ export async function isAccessTokenSessionActive(token: string): Promise<boolean
       return false;
     }
 
-    const subject = typeof payload.sub === 'string' ? payload.sub : '';
-    const issuedAt = typeof payload.iat === 'number' ? payload.iat : 0;
+    const subject = typeof payload.sub === "string" ? payload.sub : "";
+    const issuedAt = typeof payload.iat === "number" ? payload.iat : 0;
     if (!subject || issuedAt <= 0) {
       return true;
     }
 
     try {
-      const rows = await prisma.$queryRaw<Array<{ cutoff: number | null }>>`
-        SELECT EXTRACT(EPOCH FROM token_invalid_before)::bigint AS cutoff
+      const rows = await prisma.$queryRaw<
+        Array<{ cutoff: number | null; is_active: boolean }>
+      >`
+        SELECT EXTRACT(EPOCH FROM token_invalid_before)::bigint AS cutoff, is_active
         FROM users
         WHERE id = ${subject}
         LIMIT 1
       `;
 
+      if (rows[0] && !rows[0].is_active) {
+        return false;
+      }
+
       const dbCutoff = rows[0]?.cutoff;
-      if (typeof dbCutoff === 'number' && issuedAt <= dbCutoff) {
+      if (typeof dbCutoff === "number" && issuedAt <= dbCutoff) {
         return false;
       }
     } catch {
@@ -753,7 +846,7 @@ export async function isAccessTokenSessionActive(token: string): Promise<boolean
     }
 
     const revokeAfter = revokedUserAccessAfterIat.get(subject);
-    if (typeof revokeAfter === 'number' && issuedAt <= revokeAfter) {
+    if (typeof revokeAfter === "number" && issuedAt <= revokeAfter) {
       return false;
     }
 
@@ -769,10 +862,10 @@ export async function isUserPremium(userId: string): Promise<boolean> {
     where: { id: userId },
     include: {
       paymentTransactions: {
-        where: { status: 'SUCCEEDED' },
-        take: 1
-      }
-    }
+        where: { status: "SUCCEEDED" },
+        take: 1,
+      },
+    },
   });
   if (!user) return false;
   return user.claimCodeId !== null || user.paymentTransactions.length > 0;

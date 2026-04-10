@@ -108,23 +108,25 @@ export const partnerAPI = {
     }).then(async (r) => {
       const data = await r.json();
       if (!r.ok) {
-        throw new Error(data?.message || "Không thể gửi yêu cầu đăng ký đối tác.");
+        throw new Error(
+          data?.message || "Không thể gửi yêu cầu đăng ký đối tác.",
+        );
       }
       return data?.data;
     }),
 
   listMyPartnerRegistrationRequests: () =>
-    authFetch(`${API_BASE_URL}/api/v1/users/me/partner-registration-requests`).then(
-      async (r) => {
-        const data = await r.json();
-        if (!r.ok) {
-          throw new Error(
-            data?.message || "Không thể tải trạng thái yêu cầu đăng ký đối tác.",
-          );
-        }
-        return data?.data?.items ?? [];
-      },
-    ),
+    authFetch(
+      `${API_BASE_URL}/api/v1/users/me/partner-registration-requests`,
+    ).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(
+          data?.message || "Không thể tải trạng thái yêu cầu đăng ký đối tác.",
+        );
+      }
+      return data?.data?.items ?? [];
+    }),
 
   getLatestPartnerRegistrationRequest: () =>
     authFetch(
@@ -143,7 +145,9 @@ export const partnerAPI = {
     authFetch(`${API_BASE_URL}/api/v1/admin/pois`).then(async (r) => {
       const data = await r.json();
       if (!r.ok) {
-        throw new Error(data?.message || "Không thể tải danh sách POI đối tác.");
+        throw new Error(
+          data?.message || "Không thể tải danh sách POI đối tác.",
+        );
       }
       return data?.items ?? [];
     }),
@@ -156,6 +160,30 @@ export const partnerAPI = {
       const data = await r.json();
       if (!r.ok) {
         throw new Error(data?.message || "Không thể gửi yêu cầu tạo POI.");
+      }
+      return data;
+    }),
+
+  updatePoiRequest: (poiId, payload) =>
+    authFetch(`${API_BASE_URL}/api/v1/partner/pois/${poiId}`, {
+      method: "PUT",
+      body: JSON.stringify(payload),
+    }).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data?.message || "Không thể cập nhật POI.");
+      }
+      return data;
+    }),
+
+  deletePoiRequest: (poiId, reason) =>
+    authFetch(`${API_BASE_URL}/api/v1/partner/pois/${poiId}`, {
+      method: "DELETE",
+      body: JSON.stringify({ reason }),
+    }).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data?.message || "Không thể xóa POI.");
       }
       return data;
     }),

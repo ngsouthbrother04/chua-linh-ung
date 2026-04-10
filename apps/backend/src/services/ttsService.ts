@@ -1,7 +1,5 @@
 ﻿import fs from "fs/promises";
-import os from "os";
 import path from "path";
-import { spawn } from "node:child_process";
 import { Queue, Worker, type JobsOptions } from "bullmq";
 import prisma from "../lib/prisma";
 import { synthesizeWithGoogleCloud } from "./googleTtsClient";
@@ -57,7 +55,6 @@ export interface TtsRuntimeConfigValidation {
 
 type QueueMode = "bullmq" | "in-memory";
 type StorageProvider = "local";
-type TtsProvider = "piper" | "google";
 
 let ttsQueue: Queue | null = null;
 let ttsWorker: Worker<TtsJobPayload> | null = null;
@@ -71,76 +68,9 @@ function getStorageProvider(): StorageProvider {
   return "local";
 }
 
-function getTtsProvider(): TtsProvider {
-  const provider = (process.env.TTS_PROVIDER ?? "piper").trim().toLowerCase();
-  if (provider === "google") {
-    return "google";
-  }
-
-  return "piper";
-}
-
-function getPiperBinary(): string {
-  return process.env.PIPER_BIN?.trim() || "piper";
-}
-
-function parsePiperModelMap(): Record<string, string> {
-  const raw = process.env.PIPER_MODEL_MAP?.trim();
-  if (!raw) {
-    return {};
-  }
-
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-      throw new Error("PIPER_MODEL_MAP must be a JSON object.");
-    }
-
-    const normalized: Record<string, string> = {};
-    for (const [key, value] of Object.entries(
-      parsed as Record<string, unknown>,
-    )) {
-      if (typeof value !== "string") {
-        continue;
-      }
-
-      const k = key.trim().toLowerCase();
-      const v = value.trim();
-      if (!k || !v) {
-        continue;
-      }
-
-      normalized[k] = v;
-    }
-
-    return normalized;
-  } catch {
-    throw new Error("PIPER_MODEL_MAP_INVALID_JSON");
-  }
-}
-
-function resolvePiperModelPath(language: string): string {
-  const normalizedLanguage = language.trim().toLowerCase();
-  const languageBase = normalizedLanguage.split("-")[0];
-
-  const modelMap = parsePiperModelMap();
-  const fromMap = modelMap[normalizedLanguage] ?? modelMap[languageBase];
-  if (fromMap) {
-    return path.resolve(fromMap);
-  }
-
-  const modelDir = process.env.PIPER_MODEL_DIR?.trim();
-  if (modelDir) {
-    return path.resolve(modelDir, `${languageBase}.onnx`);
-  }
-
-  throw new Error("PIPER_MODEL_NOT_CONFIGURED");
-}
-
 export function validateTtsRuntimeConfig(): TtsRuntimeConfigValidation {
   const queueMode = getQueueMode();
   const storageProvider = getStorageProvider();
-  const provider = getTtsProvider();
   const errors: string[] = [];
   const warnings: string[] = [];
 
@@ -169,48 +99,35 @@ export function validateTtsRuntimeConfig(): TtsRuntimeConfigValidation {
     );
   }
 
-  if (provider === "piper") {
-    const piperModelDir = process.env.PIPER_MODEL_DIR?.trim();
-    const piperModelMap = process.env.PIPER_MODEL_MAP?.trim();
-    if (!piperModelDir && !piperModelMap) {
-      warnings.push(
-        "PIPER_MODEL_DIR or PIPER_MODEL_MAP is not set. TTS generation may fail at runtime.",
-      );
-    }
-
-    if (piperModelMap) {
-      try {
-        parsePiperModelMap();
-      } catch {
-        errors.push(
-          'PIPER_MODEL_MAP must be valid JSON object (e.g. {"vi":"./models/vi.onnx"}).',
-        );
-      }
-    }
+  const requestedProvider = (process.env.TTS_PROVIDER ?? "google")
+    .trim()
+    .toLowerCase();
+  if (requestedProvider && requestedProvider !== "google") {
+    warnings.push(
+      'TTS_PROVIDER is forced to "google" in current backend implementation.',
+    );
   }
 
-  if (provider === "google") {
-    const credentialsJson = process.env.GOOGLE_TTS_CREDENTIALS_JSON?.trim();
-    const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
+  const credentialsJson = process.env.GOOGLE_TTS_CREDENTIALS_JSON?.trim();
+  const credentialsPath = process.env.GOOGLE_APPLICATION_CREDENTIALS?.trim();
 
-    if (!credentialsJson && !credentialsPath) {
-      errors.push(
-        "Google TTS requires GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_TTS_CREDENTIALS_JSON.",
-      );
-    }
+  if (!credentialsJson && !credentialsPath) {
+    errors.push(
+      "Google TTS requires GOOGLE_APPLICATION_CREDENTIALS or GOOGLE_TTS_CREDENTIALS_JSON.",
+    );
+  }
 
-    const voiceMap = process.env.GOOGLE_TTS_VOICE_MAP?.trim();
-    if (voiceMap) {
-      try {
-        const parsed = JSON.parse(voiceMap) as unknown;
-        if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-          throw new Error("GOOGLE_TTS_VOICE_MAP_INVALID_JSON");
-        }
-      } catch {
-        errors.push(
-          'GOOGLE_TTS_VOICE_MAP must be valid JSON object (e.g. {"en":"en-US-Standard-C"}).',
-        );
+  const voiceMap = process.env.GOOGLE_TTS_VOICE_MAP?.trim();
+  if (voiceMap) {
+    try {
+      const parsed = JSON.parse(voiceMap) as unknown;
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        throw new Error("GOOGLE_TTS_VOICE_MAP_INVALID_JSON");
       }
+    } catch {
+      errors.push(
+        'GOOGLE_TTS_VOICE_MAP must be valid JSON object (e.g. {"en":"en-US-Standard-C"}).',
+      );
     }
   }
 
@@ -504,77 +421,8 @@ async function cleanupOlderPoiAudioVersions(
   return removedCount;
 }
 
-async function synthesizeWithPiper(
-  text: string,
-  language: string,
-): Promise<Buffer> {
-  const modelPath = resolvePiperModelPath(language);
-  try {
-    await fs.access(modelPath);
-  } catch {
-    throw new Error("PIPER_MODEL_FILE_NOT_FOUND");
-  }
-
-  const outputPath = path.join(
-    os.tmpdir(),
-    `piper-${Date.now()}-${Math.random().toString(16).slice(2)}-${language}.wav`,
-  );
-
-  const piperBin = getPiperBinary();
-  const args = ["--model", modelPath, "--output_file", outputPath];
-
-  const stderrChunks: Buffer[] = [];
-
-  await new Promise<void>((resolve, reject) => {
-    const child = spawn(piperBin, args, {
-      stdio: ["pipe", "ignore", "pipe"],
-    });
-
-    child.on("error", (error) => {
-      const errorCode = (error as NodeJS.ErrnoException).code;
-      if (errorCode === "ENOENT") {
-        reject(new Error("PIPER_BIN_NOT_FOUND"));
-        return;
-      }
-
-      reject(new Error(`PIPER_EXECUTION_FAILED: ${String(error)}`));
-    });
-
-    child.stderr.on("data", (chunk: Buffer) => {
-      stderrChunks.push(chunk);
-    });
-
-    child.on("close", (code) => {
-      if (code === 0) {
-        resolve();
-        return;
-      }
-
-      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
-      reject(
-        new Error(`PIPER_PROCESS_EXIT_${code}${stderr ? `: ${stderr}` : ""}`),
-      );
-    });
-
-    child.stdin.write(text);
-    child.stdin.write("\n");
-    child.stdin.end();
-  });
-
-  try {
-    return await fs.readFile(outputPath);
-  } finally {
-    await fs.rm(outputPath, { force: true });
-  }
-}
-
 async function synthesizeText(text: string, language: string): Promise<Buffer> {
-  const provider = getTtsProvider();
-  if (provider === "google") {
-    return synthesizeWithGoogleCloud(text, language);
-  }
-
-  return synthesizeWithPiper(text, language);
+  return synthesizeWithGoogleCloud(text, language);
 }
 
 export async function synthesizePreviewAudioFromText(
