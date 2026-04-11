@@ -331,3 +331,42 @@ Xem API docs:
 - Không auto-play theo GPS/geofence
 - Audio chỉ phát khi user Tap POI hoặc scan QR
 - Không dùng on-device TTS generation
+
+## 10 Hướng dẫn chạy Mobile App (Expo)
+
+## Bước A - Cấu hình kết nối API
+Để Mobile App kết nối được với Backend đang chạy trên máy tính:
+
+Xác định địa chỉ IPv4 của máy tính (Gõ ipconfig trên Windows hoặc ifconfig trên Mac). Ví dụ: 192.168.1.15.
+
+Mở file apps/mobile/api/api.js.
+
+Cập nhật baseURL thành địa chỉ IP của máy dev:
+
+JavaScript
+baseURL: "http://192.168.1.15:3000"
+(Lưu ý: Điện thoại và máy tính phải bắt chung một mạng WiFi).
+
+## Bước B - Cài đặt thư viện bổ sung (Nếu cần)
+Nếu project có thay đổi các module native, chạy lệnh:
+
+Bash
+cd apps/mobile
+npx expo install expo-speech react-native-maps expo-camera @react-native-async-storage/async-storage
+npm install axios translate-google-api i18next react-i18next
+## Bước C - Khởi chạy Expo Server
+Tại thư mục apps/mobile:
+
+Bash
+npx expo start -c
+(Lệnh -c giúp xóa cache cũ để đảm bảo các tính năng QR Scanner và Map hoạt động đúng).
+
+## Bước D - Mở App trên thiết bị
+Mở ứng dụng Expo Go trên điện thoại.
+
+Quét mã QR hiện trên Terminal máy tính.
+
+Nếu dùng trình giả lập (Simulator/Emulator), nhấn i (iOS) hoặc a (Android) trên bàn phím máy tính.
+
+## chú ý 
+Đảm bảo mạng điện thoại và máy tính phải cùng dùng chung!
