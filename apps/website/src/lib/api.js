@@ -97,6 +97,61 @@ export const authAPI = {
       }
       return data;
     }),
+
+  getPaymentEntitlement: () =>
+    authFetch(`${API_BASE_URL}/api/v1/auth/payment/entitlement`).then(
+      async (r) => {
+        const data = await r.json();
+        if (!r.ok) {
+          throw new Error(data?.message || "Không thể tải gói thanh toán.");
+        }
+        return data?.data ?? null;
+      },
+    ),
+
+  listPaymentPackages: () =>
+    fetch(`${API_BASE_URL}/api/v1/auth/payment/packages`).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data?.message || "Không thể tải danh sách gói giá.");
+      }
+      return data?.items ?? [];
+    }),
+
+  initiatePayment: ({
+    packageCode,
+    provider = "momo",
+    paymentMethod,
+    returnUrl,
+  }) =>
+    authFetch(`${API_BASE_URL}/api/v1/auth/payment/initiate`, {
+      method: "POST",
+      body: JSON.stringify({
+        packageCode,
+        provider,
+        paymentMethod: paymentMethod || provider,
+        returnUrl,
+      }),
+    }).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data?.message || "Không thể khởi tạo thanh toán.");
+      }
+      return data;
+    }),
+
+  finalizeMomoCallback: (payload) =>
+    fetch(`${API_BASE_URL}/api/v1/auth/payment/callback`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    }).then(async (r) => {
+      const data = await r.json();
+      if (!r.ok) {
+        throw new Error(data?.message || "Không thể xác nhận thanh toán MoMo.");
+      }
+      return data;
+    }),
 };
 
 // Partner

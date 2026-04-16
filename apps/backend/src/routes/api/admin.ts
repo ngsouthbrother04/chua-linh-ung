@@ -36,6 +36,12 @@ import {
   revokeAdminUserRole,
   setAdminUserAccessStatus,
 } from "../../services/adminUserRoleService";
+import {
+  createPaymentPackage,
+  deletePaymentPackage,
+  listPaymentPackages,
+  updatePaymentPackage,
+} from "../../services/paymentPackageService";
 
 const router = Router();
 
@@ -931,6 +937,164 @@ router.post(
     return res.status(200).json({
       message: "Đã mở khóa tài khoản người dùng.",
       ...result,
+    });
+  }),
+);
+
+/**
+ * GET /api/v1/admin/payment-packages
+ * @summary List payment packages
+ * @description Return payment package prices configured by admin.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {boolean} includeInactive.query - Include inactive packages
+ * @return {object} 200 - Package list
+ * @return {object} 403 - Forbidden
+ * @return {object} 500 - Internal Server Error
+ */
+router.get(
+  "/payment-packages",
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const includeInactiveRaw =
+      typeof req.query.includeInactive === "string"
+        ? req.query.includeInactive.toLowerCase()
+        : "";
+    const includeInactive =
+      includeInactiveRaw === "1" || includeInactiveRaw === "true";
+
+    const items = await listPaymentPackages({ includeInactive });
+    return res.status(200).json({
+      items,
+      total: items.length,
+    });
+  }),
+);
+
+/**
+ * POST /api/v1/admin/payment-packages
+ * @summary Create payment package
+ * @description Create a new payment package and package price.
+ * @tags Admin
+ * @security bearerAuth
+ * @param {object} request.body.required - Package payload
+ * @param {string} request.body.name.required - Package display name
+ * @param {number} request.body.amount.required - Package price
+ * @param {string} request.body.currency - Currency code (default VND)
+ * @param {number} request.body.durationDays - Package validity in days (default 30)
+ * @param {number} request.body.poiQuota.required - Maximum POIs allowed
+ * @param {string} request.body.description - Package description
+ * @param {boolean} request.body.isActive - Package activation state (default true)
+ * @return {object} 201 - Package created
+ * @return {object} 400 - Invalid payload
+ * @return {object} 403 - Forbidden
+ * @return {object} 409 - Package code already exists
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  "/payment-packages",
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const created = await createPaymentPackage({
+      name: typeof req.body?.name === "string" ? req.body.name : "",
+      amount: Number(req.body?.amount),
+      currency:
+        typeof req.body?.currency === "string" ? req.body.currency : undefined,
+      durationDays:
+        req.body?.durationDays === undefined
+          ? undefined
+          : Number(req.body.durationDays),
+      poiQuota: Number(req.body?.poiQuota),
+      description:
+        typeof req.body?.description === "string"
+          ? req.body.description
+          : undefined,
+      isActive:
+        typeof req.body?.isActive === "boolean" ? req.body.isActive : undefined,
+      createdBy: auth.actorId,
+    });
+
+    return res.status(201).json({
+      message: "Tạo gói giá thành công.",
+      data: created,
+    });
+  }),
+);
+
+/**
+ * PUT /api/v1/admin/payment-packages/:code
+ * @summary Update payment package
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} code.path.required - Package code
+ * @param {object} request.body.required - Package update payload
+ * @return {object} 200 - Package updated
+ * @return {object} 400 - Invalid payload
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - Package not found
+ * @return {object} 500 - Internal Server Error
+ */
+router.put(
+  "/payment-packages/:code",
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const packageCode =
+      typeof req.params.code === "string" ? req.params.code.trim() : "";
+    const updated = await updatePaymentPackage(packageCode, {
+      name: typeof req.body?.name === "string" ? req.body.name : undefined,
+      amount:
+        req.body?.amount === undefined ? undefined : Number(req.body.amount),
+      currency:
+        typeof req.body?.currency === "string" ? req.body.currency : undefined,
+      durationDays:
+        req.body?.durationDays === undefined
+          ? undefined
+          : Number(req.body.durationDays),
+      poiQuota:
+        req.body?.poiQuota === undefined
+          ? undefined
+          : Number(req.body.poiQuota),
+      description:
+        typeof req.body?.description === "string"
+          ? req.body.description
+          : undefined,
+      isActive:
+        typeof req.body?.isActive === "boolean" ? req.body.isActive : undefined,
+    });
+
+    return res.status(200).json({
+      message: "Cập nhật gói giá thành công.",
+      data: updated,
+    });
+  }),
+);
+
+/**
+ * DELETE /api/v1/admin/payment-packages/:code
+ * @summary Delete payment package
+ * @tags Admin
+ * @security bearerAuth
+ * @param {string} code.path.required - Package code
+ * @return {object} 200 - Package deleted
+ * @return {object} 403 - Forbidden
+ * @return {object} 404 - Package not found
+ * @return {object} 500 - Internal Server Error
+ */
+router.delete(
+  "/payment-packages/:code",
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const packageCode =
+      typeof req.params.code === "string" ? req.params.code.trim() : "";
+    const deleted = await deletePaymentPackage(packageCode);
+
+    return res.status(200).json({
+      message: "Đã xóa gói giá.",
+      data: deleted,
     });
   }),
 );

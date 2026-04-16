@@ -5,16 +5,17 @@ import {
   registerUser,
   loginUser,
   changeUserPassword,
-  redeemClaimCode,
   finalizePayment,
   initiatePayment,
   refreshAuthSession,
   revokeAuthSessionByAccessToken,
 } from "../../services/authService";
+import { verifyMoMoSignature } from "../../utils/paymentVerifier";
 import {
-  verifyVNPaySignature,
-  verifyMoMoSignature,
-} from "../../utils/paymentVerifier";
+  getPaymentPackageByCode,
+  getUserActivePaymentPackageEntitlement,
+  listPaymentPackages,
+} from "../../services/paymentPackageService";
 import {
   requireAuth,
   requireRole,
@@ -213,39 +214,6 @@ router.post(
 );
 
 /**
- * POST /api/v1/auth/payment/claim
- * @summary Redeem claim code
- * @description Redeem access code for authenticated user.
- * @tags Auth
- * @security bearerAuth
- * @param {object} request.body.required - Claim payload
- * @param {string} request.body.code - Claim code
- * @param {string} request.body.claimCode - Alternative claim code field
- * @return {object} 200 - Claim successful
- * @return {object} 400 - Missing code
- * @return {object} 401 - Unauthorized
- * @return {object} 500 - Internal Server Error
- */
-
-router.post(
-  "/payment/claim",
-  requireAuth,
-  requireRole(["USER"]),
-  asyncHandler(async (req: AuthRequest, res) => {
-    const claimCodeRaw = req.body?.code || req.body?.claimCode || "";
-    if (!claimCodeRaw) {
-      throw new ApiError(400, "Thiếu code.");
-    }
-    const userId = req.user?.sub;
-    if (!userId) {
-      throw new ApiError(401, "Unauthorized");
-    }
-    const result = await redeemClaimCode(userId, claimCodeRaw);
-    return res.status(200).json(result);
-  }),
-);
-
-/**
  * POST /api/v1/auth/token-refresh
  * @summary Refresh access token
  * @description Refresh auth session by refresh token in request body.
@@ -335,8 +303,9 @@ router.post(
  * @tags Auth
  * @security bearerAuth
  * @param {object} request.body.required - Payment init payload
- * @param {string} request.body.provider - Payment provider (vnpay or momo)
- * @param {string} request.body.paymentMethod - Alternative provider field
+ * @param {string} request.body.provider - Payment provider (momo)
+ * @param {string} request.body.paymentMethod - Alternative provider field (momo)
+ * @param {string} request.body.packageCode - Package code created by admin
  * @param {number} request.body.amount.required - Payment amount
  * @param {string} request.body.currency - Currency code
  * @param {string} request.body.deviceId - Device identifier
@@ -350,31 +319,26 @@ router.post(
 router.post(
   "/payment/initiate",
   requireAuth,
-  requireRole(["USER"]),
+  requireRole(["USER", "PARTNER"]),
   asyncHandler(async (req: AuthRequest, res) => {
+    const packageCode =
+      typeof req.body?.packageCode === "string" ? req.body.packageCode : "";
     const providerRaw =
       typeof req.body?.paymentMethod === "string"
         ? req.body.paymentMethod.toLowerCase()
         : typeof req.body?.provider === "string"
           ? req.body.provider.toLowerCase()
-          : "";
-    const amount = Number(req.body?.amount);
-    const currency =
+          : "momo";
+    let amount = Number(req.body?.amount);
+    let currency =
       typeof req.body?.currency === "string" ? req.body.currency : "VND";
     const deviceId =
       typeof req.body?.deviceId === "string" ? req.body.deviceId : undefined;
     const returnUrl =
       typeof req.body?.returnUrl === "string" ? req.body.returnUrl : undefined;
 
-    const provider =
-      providerRaw === "vnpay"
-        ? PaymentProvider.VNPAY
-        : providerRaw === "momo"
-          ? PaymentProvider.MOMO
-          : undefined;
-
-    if (!provider) {
-      throw new ApiError(400, "provider phải là vnpay hoặc momo.");
+    if (providerRaw !== "momo") {
+      throw new ApiError(400, "provider hiện chỉ hỗ trợ momo.");
     }
 
     const userId = req.user?.sub;
@@ -382,8 +346,35 @@ router.post(
       throw new ApiError(401, "Unauthorized");
     }
 
+    if (packageCode.trim()) {
+      const selectedPackage = await getPaymentPackageByCode(packageCode);
+      amount = selectedPackage.amount;
+      currency = selectedPackage.currency;
+
+      const payment = await initiatePayment({
+        amount,
+        currency,
+        deviceId,
+        returnUrl,
+        userId,
+        metadata: {
+          packageCode: selectedPackage.code,
+          packageName: selectedPackage.name,
+          poiQuota: selectedPackage.poiQuota,
+          durationDays: selectedPackage.durationDays,
+        },
+      });
+
+      return res.status(200).json({
+        message: "Khởi tạo thanh toán thành công.",
+        packageCode: packageCode.trim() || undefined,
+        packageName: selectedPackage.name,
+        poiQuota: selectedPackage.poiQuota,
+        ...payment,
+      });
+    }
+
     const payment = await initiatePayment({
-      provider,
       amount,
       currency,
       deviceId,
@@ -393,7 +384,52 @@ router.post(
 
     return res.status(200).json({
       message: "Khởi tạo thanh toán thành công.",
+      packageCode: packageCode.trim() || undefined,
       ...payment,
+    });
+  }),
+);
+
+/**
+ * GET /api/v1/auth/payment/packages
+ * @summary Get active payment package list
+ * @description Return all active packages configured by admin.
+ * @tags Auth
+ * @return {object} 200 - Active package list
+ * @return {object} 500 - Internal Server Error
+ */
+router.get(
+  "/payment/packages",
+  asyncHandler(async (_req, res) => {
+    const items = await listPaymentPackages({ includeInactive: false });
+    return res.status(200).json({
+      items,
+      total: items.length,
+    });
+  }),
+);
+
+/**
+ * GET /api/v1/auth/payment/entitlement
+ * @summary Get current user's active payment package entitlement
+ * @tags Auth
+ * @security bearerAuth
+ * @return {object} 200 - Entitlement info
+ * @return {object} 401 - Unauthorized
+ * @return {object} 500 - Internal Server Error
+ */
+router.get(
+  "/payment/entitlement",
+  requireAuth,
+  asyncHandler(async (req: AuthRequest, res) => {
+    const userId = req.user?.sub;
+    if (!userId) {
+      throw new ApiError(401, "Unauthorized");
+    }
+
+    const entitlement = await getUserActivePaymentPackageEntitlement(userId);
+    return res.status(200).json({
+      data: entitlement,
     });
   }),
 );
@@ -448,7 +484,7 @@ router.post(
  * @param {string} request.body.orderId - Provider order id
  * @param {string} request.body.transactionId - Internal transaction id
  * @param {string} request.body.status.required - success, failed, or cancelled
- * @param {string} request.body.provider - vnpay or momo
+ * @param {string} request.body.provider - momo
  * @param {object} request.body.gatewayPayload - Raw provider callback payload
  * @param {string} request.body.deviceId - Device identifier
  * @return {object} 200 - Callback accepted and processed
@@ -460,6 +496,11 @@ router.post(
 router.post(
   "/payment/callback",
   asyncHandler(async (req, res) => {
+    const isMoMoIpnPayload =
+      typeof req.body?.partnerCode === "string" &&
+      typeof req.body?.orderId === "string" &&
+      typeof req.body?.signature === "string";
+
     const transactionIdRaw =
       typeof req.body?.orderId === "string"
         ? req.body.orderId
@@ -474,7 +515,7 @@ router.post(
     const signatureHeader = req.headers["x-callback-signature"];
     const timestampHeader = req.headers["x-callback-timestamp"];
 
-    const idempotencyKey =
+    const rawIdempotencyKey =
       typeof idempotencyKeyHeader === "string" ? idempotencyKeyHeader : "";
     const signature =
       typeof signatureHeader === "string" ? signatureHeader : "";
@@ -484,15 +525,27 @@ router.post(
     const providerRaw =
       typeof req.body?.provider === "string"
         ? req.body.provider.toLowerCase()
-        : "";
+        : isMoMoIpnPayload
+          ? "momo"
+          : "";
     const gatewayPayload =
       typeof req.body?.gatewayPayload === "object" &&
       req.body.gatewayPayload !== null
         ? req.body.gatewayPayload
         : undefined;
 
-    const status =
-      statusRaw === "success" || statusRaw === "succeeded"
+    const momoResultCode =
+      typeof req.body?.resultCode === "number"
+        ? req.body.resultCode
+        : typeof req.body?.resultCode === "string"
+          ? Number(req.body.resultCode)
+          : undefined;
+
+    const status = isMoMoIpnPayload
+      ? momoResultCode === 0
+        ? "success"
+        : "failed"
+      : statusRaw === "success" || statusRaw === "succeeded"
         ? "success"
         : statusRaw === "failed" || statusRaw === "fail"
           ? "failed"
@@ -507,6 +560,19 @@ router.post(
       );
     }
 
+    const idempotencyKey = isMoMoIpnPayload
+      ? [
+          "momo",
+          typeof req.body?.requestId === "string"
+            ? req.body.requestId
+            : transactionIdRaw,
+          typeof req.body?.transId === "string"
+            ? req.body.transId
+            : String(req.body?.transId ?? ""),
+          String(momoResultCode ?? "unknown"),
+        ].join(":")
+      : rawIdempotencyKey;
+
     if (!idempotencyKey) {
       throw new ApiError(400, "Thiếu x-idempotency-key.");
     }
@@ -514,13 +580,16 @@ router.post(
     let validSignature = false;
     let signatureHashToSave = signature;
 
-    if (providerRaw === "vnpay" && gatewayPayload) {
-      validSignature = verifyVNPaySignature(
-        gatewayPayload as Record<string, string>,
-      );
-      signatureHashToSave =
-        (gatewayPayload as Record<string, string>)["vnp_SecureHash"] ||
-        "vnpay-validated";
+    if (isMoMoIpnPayload) {
+      const momoPayloadRecord = Object.fromEntries(
+        Object.entries(req.body ?? {}).map(([key, value]) => [
+          key,
+          value === undefined || value === null ? "" : String(value),
+        ]),
+      ) as Record<string, string>;
+
+      validSignature = verifyMoMoSignature(momoPayloadRecord);
+      signatureHashToSave = momoPayloadRecord.signature || "momo-validated";
     } else if (providerRaw === "momo" && gatewayPayload) {
       validSignature = verifyMoMoSignature(
         gatewayPayload as Record<string, string>,

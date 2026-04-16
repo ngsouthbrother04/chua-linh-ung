@@ -143,30 +143,7 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
-model ClaimCode {
-  id          String    @id @default(uuid())
-  code        String    @unique
-  codeType    String    @default("STANDARD") @map("code_type")
-  isActive    Boolean   @default(true) @map("is_active")
-  expiresAt   DateTime? @map("expires_at")
-  maxUses     Int?      @map("max_uses")
-  currentUses Int       @default(0) @map("current_uses")
-  metadata    Json?
-  createdBy   String?   @map("created_by")
-  isUsed      Boolean   @default(false) @map("is_used")
-  usedAt      DateTime? @map("used_at")
-  usedBy      String?   @map("used_by")
-  users       User[]
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
-
-  @@index([isUsed], map: "idx_claim_codes_is_used")
-  @@index([isActive], map: "idx_claim_codes_is_active")
-  @@index([expiresAt], map: "idx_claim_codes_expires_at")
-  @@map("claim_codes")
-}
-
-model PaymentTransaction {
+model Payment {
   id                    String                 @id @default(uuid())
   userId                String?                @map("user_id")
   transactionId         String                 @unique @map("transaction_id")
@@ -185,11 +162,30 @@ model PaymentTransaction {
   user                  User?                  @relation(fields: [userId], references: [id], onDelete: SetNull)
   callbackEvents        PaymentCallbackEvent[]
 
-  @@index([status], map: "idx_payment_transactions_status")
-  @@index([createdAt], map: "idx_payment_transactions_created_at")
-  @@index([userId], map: "idx_payment_transactions_user_id")
-  @@index([providerTransactionId], map: "idx_payment_transactions_provider_transaction_id")
-  @@map("payment_transactions")
+  @@index([status], map: "idx_payments_status")
+  @@index([createdAt], map: "idx_payments_created_at")
+  @@index([userId], map: "idx_payments_user_id")
+  @@index([providerTransactionId], map: "idx_payments_provider_transaction_id")
+  @@map("payments")
+}
+
+model PaymentPackage {
+  id            String   @id @default(uuid())
+  code          String   @unique
+  name          String
+  amount        Int
+  currency      String   @default("VND")
+  durationDays  Int      @default(30) @map("duration_days")
+  poiQuota      Int      @default(1) @map("poi_quota")
+  description   String?
+  isActive      Boolean  @default(true) @map("is_active")
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@index([isActive], map: "idx_payment_packages_is_active")
+  @@index([createdAt], map: "idx_payment_packages_created_at")
+  @@map("payment_packages")
 }
 
 model PaymentCallbackEvent {
@@ -204,7 +200,7 @@ model PaymentCallbackEvent {
   errorMessage   String?            @map("error_message")
   processedAt    DateTime?          @map("processed_at")
   createdAt      DateTime           @default(now()) @map("created_at")
-  payment        PaymentTransaction @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
+  payment        Payment            @relation(fields: [transactionId], references: [transactionId], onDelete: Cascade)
 
   @@index([transactionId], map: "idx_payment_callback_events_transaction_id")
   @@index([processed], map: "idx_payment_callback_events_processed")
@@ -219,7 +215,6 @@ model User {
   role                UserRole             @default(USER)
   deviceId            String?              @map("device_id")
   sessionId           String?              @map("session_id")
-  claimCodeId         String?              @map("claim_code_id")
   tokenInvalidBefore  DateTime?            @map("token_invalid_before")
   preferredLanguage   String               @default("vi") @map("preferred_language")
   isActive            Boolean              @default(true) @map("is_active")
@@ -227,15 +222,13 @@ model User {
   lastSeenAt          DateTime?            @map("last_seen_at")
   createdAt           DateTime             @default(now()) @map("created_at")
   updatedAt           DateTime             @updatedAt @map("updated_at")
-  claimCode           ClaimCode?           @relation(fields: [claimCodeId], references: [id], onDelete: SetNull)
-  paymentTransactions PaymentTransaction[]
+  payments            Payment[]
   authSessions        AuthSession[]
   pois                PointOfInterest[]
   tours               Tour[]
   partnerRegistrationRequests         PartnerRegistrationRequest[] @relation("PartnerRegistrationRequester")
   reviewedPartnerRegistrationRequests PartnerRegistrationRequest[] @relation("PartnerRegistrationReviewer")
 
-  @@index([claimCodeId], map: "idx_users_claim_code_id")
   @@index([isActive], map: "idx_users_is_active")
   @@index([role], map: "idx_users_role")
   @@index([tokenInvalidBefore], map: "idx_users_token_invalid_before")

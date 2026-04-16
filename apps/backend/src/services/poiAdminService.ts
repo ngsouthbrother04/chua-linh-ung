@@ -10,6 +10,7 @@ import { recordAdminAuditEvent } from "./adminAuditService";
 import { generateMultiLanguageAudioForPoi } from "./poiAudioGenerationService";
 import { ensurePoiLocalizedTextMap } from "./poiTranslationService";
 import { POI_TARGET_LANGUAGES } from "./poiLanguageConfig";
+import { getUserActivePaymentPackageEntitlement } from "./paymentPackageService";
 
 type DbClient = Prisma.TransactionClient | typeof prisma;
 
@@ -496,6 +497,42 @@ export async function createAdminPoi(
   context?: AdminActionContext,
   dbClient: DbClient = prisma,
 ): Promise<PoiAdminListItem> {
+  const creatorId = input.creatorId ?? null;
+
+  if (creatorId) {
+    const creator = await dbClient.user.findUnique({
+      where: { id: creatorId },
+      select: { role: true },
+    });
+
+    if (creator?.role === "PARTNER") {
+      const entitlement =
+        await getUserActivePaymentPackageEntitlement(creatorId);
+
+      if (!entitlement) {
+        throw new ApiError(
+          403,
+          "Bạn cần mua gói thanh toán hợp lệ trước khi tạo POI.",
+        );
+      }
+
+      const publishedCount = await dbClient.pointOfInterest.count({
+        where: {
+          creatorId,
+          deletedAt: null,
+          isPublished: true,
+        },
+      });
+
+      if (publishedCount >= entitlement.poiQuota) {
+        throw new ApiError(
+          403,
+          `Gói hiện tại đã hết quota. Hãy mua gói mới để tạo thêm POI (tối đa ${entitlement.poiQuota} POI).`,
+        );
+      }
+    }
+  }
+
   const inputName = normalizeTextMap(input.name, "name");
   const inputDescription = normalizeTextMap(input.description, "description");
   assertMatchingLanguageSets(inputName, inputDescription);
@@ -510,7 +547,6 @@ export async function createAdminPoi(
     input.radius !== undefined
       ? normalizeNumericField(input.radius, "radius")
       : 50;
-  const creatorId = input.creatorId ?? null;
   const image = normalizeNullableString(input.image) ?? null;
   const audioUrls = normalizeAudioUrls(input.audioUrls);
   assertAudioUrlsAligned(audioUrls, description);
@@ -1093,11 +1129,50 @@ export async function publishAdminPoi(
 ): Promise<PublishAdminPoiResult> {
   const existingPoi = await dbClient.pointOfInterest.findFirst({
     where: { id: poiId, deletedAt: null },
-    select: { id: true },
+    select: {
+      id: true,
+      creatorId: true,
+      isPublished: true,
+    },
   });
 
   if (!existingPoi) {
     throw new ApiError(404, "Không tìm thấy POI.");
+  }
+
+  if (existingPoi.creatorId && !existingPoi.isPublished) {
+    const creator = await dbClient.user.findUnique({
+      where: { id: existingPoi.creatorId },
+      select: { role: true },
+    });
+
+    if (creator?.role === "PARTNER") {
+      const entitlement = await getUserActivePaymentPackageEntitlement(
+        existingPoi.creatorId,
+      );
+
+      if (!entitlement) {
+        throw new ApiError(
+          403,
+          "Tài khoản chưa có gói thanh toán hợp lệ để publish POI.",
+        );
+      }
+
+      const publishedCount = await dbClient.pointOfInterest.count({
+        where: {
+          creatorId: existingPoi.creatorId,
+          deletedAt: null,
+          isPublished: true,
+        },
+      });
+
+      if (publishedCount >= entitlement.poiQuota) {
+        throw new ApiError(
+          403,
+          `Đã vượt số POI cho phép của gói hiện tại (${entitlement.poiQuota}).`,
+        );
+      }
+    }
   }
 
   const result = await withOptionalTransaction(dbClient, async (tx) => {

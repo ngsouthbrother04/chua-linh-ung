@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useMemo, useState } from "react";
+﻿import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 import {
   Circle,
@@ -9,7 +9,7 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import QRCode from "qrcode";
-import { partnerAPI, ttsAPI, usersAPI } from "../lib/api";
+import { authAPI, partnerAPI, ttsAPI, usersAPI } from "../lib/api";
 import { useToast } from "../hooks/useToast";
 
 function clampCoordinate(value, min, max) {
@@ -61,6 +61,15 @@ function getApprovalStatusBadge(status) {
   return "bg-amber-50 text-amber-700 border-amber-200";
 }
 
+function getLastQueryValue(searchParams, key) {
+  const values = searchParams.getAll(key);
+  if (!values.length) {
+    return "";
+  }
+
+  return values[values.length - 1] || "";
+}
+
 export default function PartnerProfile() {
   const { showSuccess, showError } = useToast();
   const token = localStorage.getItem("accessToken");
@@ -78,6 +87,11 @@ export default function PartnerProfile() {
     useState([]);
   const [isLoadingRegistrationRequests, setIsLoadingRegistrationRequests] =
     useState(false);
+  const [paymentEntitlement, setPaymentEntitlement] = useState(null);
+  const [isLoadingEntitlement, setIsLoadingEntitlement] = useState(false);
+  const [paymentPackages, setPaymentPackages] = useState([]);
+  const [isLoadingPackages, setIsLoadingPackages] = useState(false);
+  const [isPurchasingPackage, setIsPurchasingPackage] = useState("");
 
   const [pois, setPois] = useState([]);
   const [poiQrMap, setPoiQrMap] = useState({});
@@ -101,12 +115,16 @@ export default function PartnerProfile() {
   const [audioError, setAudioError] = useState("");
   const [selectedAudioLanguage, setSelectedAudioLanguage] = useState("auto");
   const [deletingPoiId, setDeletingPoiId] = useState(null);
+  const momoCallbackHandledRef = useRef(false);
 
   const role = String(profile?.role || "USER").toUpperCase();
   const isPartner = role === "PARTNER";
   const publishedCount = pois.filter((item) =>
     Boolean(item?.isPublished),
   ).length;
+  const entitlementQuota = Number(paymentEntitlement?.poiQuota ?? 0);
+  const entitlementRemaining = Math.max(entitlementQuota - publishedCount, 0);
+  const canCreatePoi = Boolean(paymentEntitlement && entitlementRemaining > 0);
   const publishedPois = useMemo(
     () => pois.filter((item) => Boolean(item?.isPublished)),
     [pois],
@@ -146,6 +164,11 @@ export default function PartnerProfile() {
   };
 
   const openCreatePoiModal = () => {
+    if (!canCreatePoi) {
+      showError("Bạn cần mua gói thanh toán hợp lệ trước khi tạo POI.");
+      return;
+    }
+
     resetPoiForm();
     setIsPoiModalOpen(true);
   };
@@ -198,8 +221,55 @@ export default function PartnerProfile() {
   const loadPartnerData = useCallback(async () => {
     try {
       setIsLoadingPartnerData(true);
-      const myPois = await partnerAPI.getMyPois();
-      setPois(Array.isArray(myPois) ? myPois : []);
+      setIsLoadingEntitlement(true);
+      setIsLoadingPackages(true);
+      const [myPoisResult, entitlementResult, packagesResult] =
+        await Promise.allSettled([
+          partnerAPI.getMyPois(),
+          authAPI.getPaymentEntitlement(),
+          authAPI.listPaymentPackages(),
+        ]);
+
+      const errors = [];
+
+      if (myPoisResult.status === "fulfilled") {
+        setPois(Array.isArray(myPoisResult.value) ? myPoisResult.value : []);
+      } else {
+        setPois([]);
+        errors.push(
+          myPoisResult.reason instanceof Error
+            ? myPoisResult.reason.message
+            : "Không tải được danh sách POI.",
+        );
+      }
+
+      if (entitlementResult.status === "fulfilled") {
+        setPaymentEntitlement(entitlementResult.value);
+      } else {
+        setPaymentEntitlement(null);
+        errors.push(
+          entitlementResult.reason instanceof Error
+            ? entitlementResult.reason.message
+            : "Không tải được trạng thái gói thanh toán.",
+        );
+      }
+
+      if (packagesResult.status === "fulfilled") {
+        setPaymentPackages(
+          Array.isArray(packagesResult.value) ? packagesResult.value : [],
+        );
+      } else {
+        setPaymentPackages([]);
+        errors.push(
+          packagesResult.reason instanceof Error
+            ? packagesResult.reason.message
+            : "Không tải được danh sách gói.",
+        );
+      }
+
+      if (errors.length > 0) {
+        showError(errors.join(" • "));
+      }
     } catch (error) {
       showError(
         error instanceof Error
@@ -208,6 +278,8 @@ export default function PartnerProfile() {
       );
     } finally {
       setIsLoadingPartnerData(false);
+      setIsLoadingEntitlement(false);
+      setIsLoadingPackages(false);
     }
   }, [showError]);
 
@@ -231,6 +303,62 @@ export default function PartnerProfile() {
     if (!token) return;
     loadProfile();
   }, [token]);
+
+  useEffect(() => {
+    if (!token || momoCallbackHandledRef.current) {
+      return;
+    }
+
+    const searchParams = new URLSearchParams(window.location.search);
+    const orderId = getLastQueryValue(searchParams, "orderId");
+    const requestId = getLastQueryValue(searchParams, "requestId");
+    const signature = getLastQueryValue(searchParams, "signature");
+
+    if (!orderId || !requestId || !signature) {
+      return;
+    }
+
+    momoCallbackHandledRef.current = true;
+
+    const run = async () => {
+      try {
+        const payload = {
+          partnerCode: getLastQueryValue(searchParams, "partnerCode"),
+          orderId,
+          requestId,
+          amount: getLastQueryValue(searchParams, "amount"),
+          orderInfo: getLastQueryValue(searchParams, "orderInfo"),
+          orderType: getLastQueryValue(searchParams, "orderType"),
+          transId: getLastQueryValue(searchParams, "transId"),
+          resultCode: Number(getLastQueryValue(searchParams, "resultCode")),
+          message: getLastQueryValue(searchParams, "message"),
+          payType: getLastQueryValue(searchParams, "payType"),
+          responseTime: getLastQueryValue(searchParams, "responseTime"),
+          extraData: getLastQueryValue(searchParams, "extraData"),
+          signature,
+        };
+
+        await authAPI.finalizeMomoCallback(payload);
+
+        if (payload.resultCode === 0) {
+          showSuccess("Thanh toán thành công và đã cập nhật gói.");
+        } else {
+          showError("Thanh toán không thành công.");
+        }
+
+        window.history.replaceState({}, "", window.location.pathname);
+        await loadPartnerData();
+      } catch (error) {
+        showError(
+          error instanceof Error
+            ? error.message
+            : "Không thể xác nhận trạng thái thanh toán.",
+        );
+      }
+    };
+
+    run();
+  }, [token, loadPartnerData, showError, showSuccess]);
 
   useEffect(() => {
     let cancelled = false;
@@ -333,6 +461,11 @@ export default function PartnerProfile() {
 
   const handleCreatePoiRequest = async (e) => {
     e.preventDefault();
+
+    if (!isEditingPoi && !canCreatePoi) {
+      showError("Bạn cần mua gói thanh toán hợp lệ trước khi tạo POI.");
+      return;
+    }
 
     const trimmedName = pointName.trim();
     const trimmedDescription = pointDescription.trim();
@@ -446,6 +579,37 @@ export default function PartnerProfile() {
       );
     } finally {
       setIsCreatingPoi(false);
+    }
+  };
+
+  const handlePurchasePackage = async (item) => {
+    if (!item?.code) {
+      showError("Thiếu mã gói thanh toán.");
+      return;
+    }
+
+    try {
+      setIsPurchasingPackage(item.code);
+      const result = await authAPI.initiatePayment({
+        packageCode: item.code,
+        provider: "momo",
+        paymentMethod: "momo",
+        returnUrl: `${window.location.origin}${window.location.pathname}`,
+      });
+
+      if (!result?.paymentUrl) {
+        throw new Error("Không nhận được đường dẫn thanh toán.");
+      }
+
+      window.location.assign(result.paymentUrl);
+    } catch (error) {
+      showError(
+        error instanceof Error
+          ? error.message
+          : "Không thể khởi tạo thanh toán gói.",
+      );
+    } finally {
+      setIsPurchasingPackage("");
     }
   };
 
@@ -669,7 +833,11 @@ export default function PartnerProfile() {
               <p className="text-sm font-semibold">
                 Tài khoản PARTNER đã kích hoạt
               </p>
-              <p className="mt-1 text-xs">Bạn có thể tạo POI trực tiếp.</p>
+              <p className="mt-1 text-xs">
+                {canCreatePoi
+                  ? "Bạn có thể tạo POI trực tiếp."
+                  : "Bạn cần mua gói thanh toán hợp lệ trước khi tạo POI."}
+              </p>
             </div>
 
             <section className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -689,15 +857,112 @@ export default function PartnerProfile() {
                   {publishedCount}
                 </p>
               </div>
+              <div className="rounded-2xl border border-cyan-200 bg-cyan-50 p-4">
+                <p className="text-xs uppercase tracking-wider text-cyan-700">
+                  Quota gói còn lại
+                </p>
+                <p className="mt-2 text-3xl font-black text-cyan-900">
+                  {isLoadingEntitlement
+                    ? "..."
+                    : entitlementQuota > 0
+                      ? entitlementRemaining
+                      : 0}
+                </p>
+                <p className="mt-1 text-xs text-cyan-700">
+                  {paymentEntitlement
+                    ? `${paymentEntitlement.packageName} • ${publishedCount}/${paymentEntitlement.poiQuota} POI`
+                    : "Chưa có gói thanh toán hợp lệ"}
+                </p>
+              </div>
+            </section>
+
+            <section
+              id="payment-packages-panel"
+              className="mb-6 rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    Gói thanh toán
+                  </p>
+                  <h2 className="mt-1 text-lg font-bold text-slate-900">
+                    Mua gói trước khi tạo POI
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-600">
+                    Mỗi gói có số POI tối đa và thời hạn sử dụng riêng. Chọn gói
+                    phù hợp rồi thanh toán qua MoMo.
+                  </p>
+                </div>
+                <div className="rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2 text-sm text-cyan-900">
+                  {isLoadingPackages
+                    ? "Đang tải gói..."
+                    : paymentPackages.length
+                      ? `${paymentPackages.length} gói đang mở bán`
+                      : "Chưa có gói nào đang mở bán"}
+                </div>
+              </div>
+
+              <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {paymentPackages.map((item) => (
+                  <div
+                    key={item.code}
+                    className="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-slate-900">
+                          {item.name}
+                        </p>
+                        <p className="mt-1 text-xs uppercase tracking-wider text-slate-500">
+                          {item.code}
+                        </p>
+                      </div>
+                      <p className="text-sm font-bold text-cyan-800">
+                        {new Intl.NumberFormat("vi-VN", {
+                          style: "currency",
+                          currency: item.currency || "VND",
+                          maximumFractionDigits: 0,
+                        }).format(Number(item.amount || 0))}
+                      </p>
+                    </div>
+
+                    <p className="mt-3 text-sm text-slate-600">
+                      {item.description || "Gói thanh toán cho đối tác."}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-500">
+                      Hiệu lực {item.durationDays} ngày • Tối đa {item.poiQuota}{" "}
+                      POI
+                    </p>
+
+                    <button
+                      type="button"
+                      onClick={() => handlePurchasePackage(item)}
+                      disabled={isPurchasingPackage === item.code}
+                      className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-xl bg-cyan-600 px-4 text-sm font-semibold text-white transition hover:bg-cyan-700 disabled:opacity-60"
+                    >
+                      {isPurchasingPackage === item.code
+                        ? "Đang khởi tạo..."
+                        : "Mua gói này"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+
+              {!isLoadingPackages && paymentPackages.length === 0 && (
+                <p className="mt-4 text-sm text-slate-500">
+                  Hiện chưa có gói nào được bật. Hãy liên hệ ADMIN để mở bán.
+                </p>
+              )}
             </section>
 
             <div className="mb-6 flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={openCreatePoiModal}
+                disabled={!canCreatePoi}
                 className="h-11 rounded-xl bg-emerald-600 px-5 text-sm font-semibold text-white transition hover:bg-emerald-700"
               >
-                Tạo POI mới
+                {canCreatePoi ? "Tạo POI mới" : "Mua gói để tạo POI"}
               </button>
               <button
                 type="button"

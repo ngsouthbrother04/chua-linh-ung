@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { Prisma } from "../generated/prisma/client";
 import prisma from "../lib/prisma";
 import { PaymentProvider, PaymentStatus } from "../generated/prisma/client";
 
@@ -10,7 +11,7 @@ export interface ClaimAuthResult {
   accessToken: string;
   tokenType: "Bearer";
   expiresIn: number;
-  method: "claim_code";
+  method: "password";
   role: UserRole;
   deviceId?: string;
   refreshToken: string;
@@ -19,12 +20,12 @@ export interface ClaimAuthResult {
 }
 
 export interface PaymentInitiateInput {
-  provider: PaymentProvider;
   amount: number;
   currency?: string;
   deviceId?: string;
   returnUrl?: string;
   userId: string;
+  metadata?: Prisma.InputJsonValue;
 }
 
 export interface PaymentInitiateResult {
@@ -77,8 +78,6 @@ export interface ChangePasswordInput {
   newPassword: string;
 }
 
-const DEFAULT_CLAIM_CODES = ["ABC123", "FOODIE2026", "LINHUNGVIP"];
-
 const TOKEN_TTL_SECONDS = Number(
   process.env.AUTH_TOKEN_TTL_SECONDS ?? 24 * 60 * 60,
 );
@@ -96,6 +95,23 @@ const TOKEN_SECRETS = process.env.AUTH_JWT_SECRETS
 const CURRENT_KID = process.env.AUTH_JWT_KID ?? "1";
 const revokedAccessTokenJtis = new Map<string, number>();
 const revokedUserAccessAfterIat = new Map<string, number>();
+function getMomoConfig() {
+  return {
+    createEndpoint:
+      process.env.MOMO_GATEWAY_CREATE_URL?.trim() ||
+      "https://test-payment.momo.vn/v2/gateway/api/create",
+    partnerCode: process.env.MOMO_PARTNER_CODE?.trim() || "",
+    accessKey: process.env.MOMO_ACCESS_KEY?.trim() || "",
+    secretKey: process.env.MOMO_SECRET_KEY?.trim() || "",
+    redirectUrl:
+      process.env.MOMO_REDIRECT_URL?.trim() ||
+      "http://localhost:5173/partner-profile",
+    ipnUrl:
+      process.env.MOMO_IPN_URL?.trim() ||
+      "http://127.0.0.1:3000/api/v1/auth/payment/callback",
+    requestType: process.env.MOMO_REQUEST_TYPE?.trim() || "captureWallet",
+  };
+}
 
 function base64UrlEncode(input: string): string {
   return Buffer.from(input)
@@ -141,23 +157,6 @@ function toUserRole(value: unknown): UserRole {
   return "USER";
 }
 
-function roleFromClaimCodeType(codeType?: string | null): UserRole {
-  if (!codeType) {
-    return "USER";
-  }
-
-  const normalized = codeType.trim().toUpperCase();
-  if (normalized === "ADMIN" || normalized === "ADMIN_CODE") {
-    return "ADMIN";
-  }
-
-  if (normalized === "PARTNER" || normalized === "PARTNER_CODE") {
-    return "PARTNER";
-  }
-
-  return "USER";
-}
-
 async function fetchPersistedUserRole(
   userId: string,
 ): Promise<UserRole | null> {
@@ -181,7 +180,6 @@ async function fetchPersistedUserRole(
 
 async function resolveUserRole(input: {
   userId: string;
-  claimCodeId?: string | null;
   fallbackRole?: UserRole;
 }): Promise<UserRole> {
   const persistedRole = await fetchPersistedUserRole(input.userId);
@@ -189,37 +187,39 @@ async function resolveUserRole(input: {
     return persistedRole;
   }
 
-  if (input.claimCodeId) {
-    const claimCode = await prisma.claimCode.findUnique({
-      where: { id: input.claimCodeId },
-      select: { codeType: true },
-    });
-
-    if (claimCode?.codeType) {
-      return roleFromClaimCodeType(claimCode.codeType);
-    }
-  }
-
   return input.fallbackRole ?? "USER";
 }
 
-async function syncUserRoleByClaimCode(
-  userId: string,
-  claimCodeId?: string | null,
-): Promise<UserRole> {
-  const role = await resolveUserRole({ userId, claimCodeId });
+function buildMomoSignature(input: {
+  accessKey: string;
+  amount: string;
+  extraData: string;
+  ipnUrl: string;
+  orderId: string;
+  orderInfo: string;
+  partnerCode: string;
+  redirectUrl: string;
+  requestId: string;
+  requestType: string;
+  secretKey: string;
+}): string {
+  const rawSignature = [
+    `accessKey=${input.accessKey}`,
+    `amount=${input.amount}`,
+    `extraData=${input.extraData}`,
+    `ipnUrl=${input.ipnUrl}`,
+    `orderId=${input.orderId}`,
+    `orderInfo=${input.orderInfo}`,
+    `partnerCode=${input.partnerCode}`,
+    `redirectUrl=${input.redirectUrl}`,
+    `requestId=${input.requestId}`,
+    `requestType=${input.requestType}`,
+  ].join("&");
 
-  try {
-    await prisma.$executeRaw`
-      UPDATE users
-      SET role = ${role}
-      WHERE id = ${userId}
-    `;
-  } catch {
-    // Ignore during rollout when role column is not yet deployed.
-  }
-
-  return role;
+  return crypto
+    .createHmac("sha256", input.secretKey)
+    .update(rawSignature)
+    .digest("hex");
 }
 
 function createRefreshToken(
@@ -301,10 +301,6 @@ export function verifyJwt(token: string): any {
   return payloadObj;
 }
 
-function toSafeClaimCode(rawCode: string): string {
-  return rawCode.trim().toUpperCase();
-}
-
 export function createAuthToken(
   subject: string,
   sessionId?: string,
@@ -344,25 +340,13 @@ async function issueAuthPair(input: {
     accessToken: access.token,
     tokenType: "Bearer",
     expiresIn: access.expiresIn,
-    method: "claim_code",
+    method: "password",
     role: input.role,
     deviceId: input.deviceId,
     refreshToken: refresh.token,
     refreshExpiresIn: refresh.expiresIn,
     sessionId,
   };
-}
-
-async function seedDefaultClaimCodes(): Promise<void> {
-  const fromEnv = process.env.AUTH_CLAIM_CODES?.split(",")
-    .map((code) => code.trim().toUpperCase())
-    .filter(Boolean);
-
-  const source = fromEnv && fromEnv.length > 0 ? fromEnv : DEFAULT_CLAIM_CODES;
-  await prisma.claimCode.createMany({
-    data: source.map((code) => ({ code })),
-    skipDuplicates: true,
-  });
 }
 
 export async function registerUser(input: any): Promise<ClaimAuthResult> {
@@ -387,7 +371,6 @@ export async function registerUser(input: any): Promise<ClaimAuthResult> {
 
   const role = await resolveUserRole({
     userId: user.id,
-    claimCodeId: user.claimCodeId,
     fallbackRole: "USER",
   });
 
@@ -425,7 +408,6 @@ export async function loginUser(input: any): Promise<ClaimAuthResult> {
 
   const role = await resolveUserRole({
     userId: user.id,
-    claimCodeId: user.claimCodeId,
     fallbackRole: "USER",
   });
 
@@ -484,52 +466,6 @@ export async function changeUserPassword(
   await revokeAllUserAccessTokens(user.id);
 }
 
-export async function redeemClaimCode(
-  userId: string,
-  claimCode: string,
-): Promise<{ success: boolean; message: string }> {
-  const normalizedCode = toSafeClaimCode(claimCode);
-
-  if (!/^[A-Z0-9_-]{4,32}$/.test(normalizedCode)) {
-    throw new Error("INVALID_CLAIM_CODE");
-  }
-
-  await seedDefaultClaimCodes();
-
-  const updated = await prisma.claimCode.updateMany({
-    where: {
-      code: normalizedCode,
-      isUsed: false,
-    },
-    data: {
-      isUsed: true,
-      usedAt: new Date(),
-      usedBy: `user:${userId}`,
-    },
-  });
-
-  if (updated.count === 0) {
-    throw new Error("CLAIM_CODE_NOT_FOUND_OR_USED");
-  }
-
-  const codeRecord = await prisma.claimCode.findUnique({
-    where: { code: normalizedCode },
-    select: { id: true, codeType: true },
-  });
-
-  await prisma.user.update({
-    where: { id: userId },
-    data: { claimCodeId: codeRecord?.id },
-  });
-
-  await syncUserRoleByClaimCode(userId, codeRecord?.id);
-
-  return {
-    success: true,
-    message: "Nhập mã thành công. Bạn đã trở thành hội viên Premium.",
-  };
-}
-
 export async function initiatePayment(
   input: PaymentInitiateInput,
 ): Promise<PaymentInitiateResult> {
@@ -537,29 +473,106 @@ export async function initiatePayment(
     throw new Error("INVALID_PAYMENT_AMOUNT");
   }
 
+  const momoConfig = getMomoConfig();
+
+  if (
+    !momoConfig.partnerCode ||
+    !momoConfig.accessKey ||
+    !momoConfig.secretKey
+  ) {
+    throw new Error("MOMO_SANDBOX_NOT_CONFIGURED");
+  }
+
   const transactionId = `txn_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   const expiresIn = 15 * 60;
   const expiresAt = new Date(Date.now() + expiresIn * 1000).toISOString();
 
-  const paymentGatewayBaseUrl =
-    process.env.PAYMENT_GATEWAY_BASE_URL ?? "https://sandbox.payments.local";
-  const callbackUrl =
-    input.returnUrl ??
-    process.env.PAYMENT_RETURN_URL ??
-    "phoamthuc://payment-callback";
-  const paymentUrl = `${paymentGatewayBaseUrl}/${input.provider}?transactionId=${encodeURIComponent(
-    transactionId,
-  )}&amount=${encodeURIComponent(input.amount.toString())}&returnUrl=${encodeURIComponent(callbackUrl)}`;
+  const provider = PaymentProvider.MOMO;
+  const redirectUrl = input.returnUrl ?? momoConfig.redirectUrl;
+  const amount = String(Math.trunc(input.amount));
+  const orderInfo =
+    typeof input.metadata === "object" &&
+    input.metadata !== null &&
+    !Array.isArray(input.metadata) &&
+    typeof (input.metadata as Record<string, unknown>).packageName === "string"
+      ? `Thanh toan goi ${(input.metadata as Record<string, unknown>).packageName}`
+      : "Thanh toan goi Pho Am Thuc";
+  const extraData = Buffer.from(
+    JSON.stringify({
+      userId: input.userId,
+      metadata: input.metadata ?? {},
+    }),
+    "utf8",
+  ).toString("base64");
+  const requestId = transactionId;
+  const signature = buildMomoSignature({
+    accessKey: momoConfig.accessKey,
+    amount,
+    extraData,
+    ipnUrl: momoConfig.ipnUrl,
+    orderId: transactionId,
+    orderInfo,
+    partnerCode: momoConfig.partnerCode,
+    redirectUrl,
+    requestId,
+    requestType: momoConfig.requestType,
+    secretKey: momoConfig.secretKey,
+  });
 
-  const created = await prisma.paymentTransaction.create({
+  const momoResponse = await fetch(momoConfig.createEndpoint, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      partnerCode: momoConfig.partnerCode,
+      accessKey: momoConfig.accessKey,
+      requestId,
+      amount,
+      orderId: transactionId,
+      orderInfo,
+      redirectUrl,
+      ipnUrl: momoConfig.ipnUrl,
+      extraData,
+      requestType: momoConfig.requestType,
+      lang: "vi",
+      signature,
+    }),
+  });
+
+  const momoPayload = (await momoResponse.json()) as {
+    payUrl?: string;
+    deeplink?: string;
+    qrCodeUrl?: string;
+    resultCode?: number;
+    message?: string;
+    transId?: string;
+  };
+
+  if (!momoResponse.ok || momoPayload.resultCode !== 0) {
+    throw new Error(
+      momoPayload.message || `MOMO_CREATE_FAILED_${momoResponse.status}`,
+    );
+  }
+
+  const paymentUrl =
+    momoPayload.payUrl || momoPayload.deeplink || momoPayload.qrCodeUrl || "";
+
+  if (!paymentUrl) {
+    throw new Error("MOMO_PAYMENT_URL_MISSING");
+  }
+
+  const created = await prisma.payment.create({
     data: {
       transactionId,
       userId: input.userId,
-      provider: input.provider,
+      provider,
+      providerTransactionId: momoPayload.transId ?? undefined,
       amount: input.amount,
       currency: "VND",
       status: "PENDING",
-      returnUrl: callbackUrl,
+      metadata: input.metadata ?? undefined,
+      returnUrl: redirectUrl,
       paymentUrl,
       expiresAt: new Date(expiresAt),
     },
@@ -593,7 +606,7 @@ export async function finalizePayment(
   });
 
   if (existingCallback) {
-    const existingPayment = await prisma.paymentTransaction.findUnique({
+    const existingPayment = await prisma.payment.findUnique({
       where: { transactionId: existingCallback.transactionId },
     });
 
@@ -634,7 +647,7 @@ export async function finalizePayment(
     };
   }
 
-  const existing = await prisma.paymentTransaction.findUnique({
+  const existing = await prisma.payment.findUnique({
     where: { transactionId: input.transactionId },
   });
 
@@ -652,9 +665,12 @@ export async function finalizePayment(
   }
 
   const updated = await prisma.$transaction(async (tx: any) => {
-    const payment = await tx.paymentTransaction.update({
+    const payment = await tx.payment.update({
       where: { transactionId: input.transactionId },
-      data: { status: mappedStatus },
+      data: {
+        status: mappedStatus,
+        ...(mappedStatus === "SUCCEEDED" ? { completedAt: new Date() } : {}),
+      },
     });
 
     await tx.paymentCallbackEvent.create({
@@ -861,12 +877,12 @@ export async function isUserPremium(userId: string): Promise<boolean> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: {
-      paymentTransactions: {
+      payments: {
         where: { status: "SUCCEEDED" },
         take: 1,
       },
     },
   });
   if (!user) return false;
-  return user.claimCodeId !== null || user.paymentTransactions.length > 0;
+  return user.payments.length > 0;
 }

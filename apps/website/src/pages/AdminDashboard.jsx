@@ -6,6 +6,7 @@ import {
   Bell,
   CheckCircle2,
   Clock3,
+  CircleDollarSign,
   FileText,
   Gauge,
   ImagePlus,
@@ -35,6 +36,12 @@ const statCards = [
     title: "POI đã xuất bản",
     icon: ShieldCheck,
     gradient: "from-emerald-500 to-teal-500",
+  },
+  {
+    key: "paymentPackages",
+    title: "Gói giá đang bật",
+    icon: CircleDollarSign,
+    gradient: "from-cyan-500 to-sky-500",
   },
 ];
 
@@ -218,6 +225,18 @@ function formatNumber(value) {
   return new Intl.NumberFormat("en-US").format(value);
 }
 
+function formatCurrency(value, currency = "VND") {
+  try {
+    return new Intl.NumberFormat("vi-VN", {
+      style: "currency",
+      currency,
+      maximumFractionDigits: 0,
+    }).format(value);
+  } catch {
+    return `${formatNumber(value)} ${currency}`;
+  }
+}
+
 function getPoiStatusTone(poi) {
   if (!poi.isPublished) {
     return "slate";
@@ -247,6 +266,7 @@ export default function AdminDashboard() {
     { key: "overview", label: "Tổng quan", icon: LayoutDashboard },
     { key: "pois", label: "POI", icon: FileText },
     { key: "partners", label: "Đối tác", icon: Layers3 },
+    { key: "pricing", label: "Gói giá", icon: CircleDollarSign },
     { key: "users", label: "Người dùng", icon: ShieldCheck },
     { key: "analytics", label: "Thống kê", icon: BarChart3 },
     { key: "settings", label: "Cài đặt", icon: Settings2 },
@@ -254,12 +274,16 @@ export default function AdminDashboard() {
 
   const [adminPois, setAdminPois] = useState([]);
   const [adminUsers, setAdminUsers] = useState([]);
+  const [paymentPackages, setPaymentPackages] = useState([]);
   const [partnerRegistrationRequests, setPartnerRegistrationRequests] =
     useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUpdatingUserRoleId, setIsUpdatingUserRoleId] = useState("");
   const [isUpdatingUserAccessId, setIsUpdatingUserAccessId] = useState("");
+  const [isSavingPackage, setIsSavingPackage] = useState(false);
   const [loadError, setLoadError] = useState("");
+  const [packageError, setPackageError] = useState("");
+  const [packageSuccess, setPackageSuccess] = useState("");
   const [reloadTick, setReloadTick] = useState(0);
   const [userSearchText, setUserSearchText] = useState("");
   const [userRoleFilter, setUserRoleFilter] = useState("ALL");
@@ -268,6 +292,16 @@ export default function AdminDashboard() {
   const [poiTypeFilter, setPoiTypeFilter] = useState("ALL");
   const [pendingUserAction, setPendingUserAction] = useState(null);
   const [activeSection, setActiveSection] = useState("overview");
+  const [editingPackageCode, setEditingPackageCode] = useState("");
+  const [packageForm, setPackageForm] = useState({
+    name: "",
+    amount: "",
+    currency: "VND",
+    durationDays: "30",
+    poiQuota: "1",
+    description: "",
+    isActive: true,
+  });
 
   const storedToken = getStoredToken();
   const userRole = storedToken ? getRoleFromToken(storedToken) : "USER";
@@ -294,6 +328,9 @@ export default function AdminDashboard() {
         fetchJson("/api/v1/admin/pois", { headers: adminHeaders }),
         fetchJson("/api/v1/admin/users", { headers: adminHeaders }),
         fetchJson("/api/v1/admin/partner-registration-requests", {
+          headers: adminHeaders,
+        }),
+        fetchJson("/api/v1/admin/payment-packages?includeInactive=true", {
           headers: adminHeaders,
         }),
       ]);
@@ -323,6 +360,13 @@ export default function AdminDashboard() {
         );
       }
 
+      if (adminRequests[3].status === "fulfilled") {
+        setPaymentPackages(adminRequests[3].value.items ?? []);
+      } else {
+        setPaymentPackages([]);
+        errors.push(`Payment packages: ${adminRequests[3].reason.message}`);
+      }
+
       if (!cancelled) {
         setLoadError(errors.length > 0 ? errors.join(" • ") : "");
         setIsLoading(false);
@@ -344,6 +388,19 @@ export default function AdminDashboard() {
       cancelled = true;
     };
   }, [reloadTick, storedToken]);
+
+  useEffect(() => {
+    if (!packageError && !packageSuccess) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setPackageError("");
+      setPackageSuccess("");
+    }, 5000);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [packageError, packageSuccess]);
 
   const handleReviewPartnerRegistrationRequest = async (requestId, action) => {
     const decisionWord = action === "approve" ? "duyệt" : "từ chối";
@@ -474,6 +531,145 @@ export default function AdminDashboard() {
     setPendingUserAction(null);
   };
 
+  const handlePackageFormChange = (field, value) => {
+    setPackageForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const resetPackageForm = () => {
+    setEditingPackageCode("");
+    setPackageForm({
+      name: "",
+      amount: "",
+      currency: "VND",
+      durationDays: "30",
+      poiQuota: "1",
+      description: "",
+      isActive: true,
+    });
+  };
+
+  const handleEditPaymentPackage = (item) => {
+    setEditingPackageCode(item.code);
+    setPackageForm({
+      name: item.name || "",
+      amount: String(item.amount ?? ""),
+      currency: item.currency || "VND",
+      durationDays: String(item.durationDays ?? 30),
+      poiQuota: String(item.poiQuota ?? 1),
+      description: item.description || "",
+      isActive: Boolean(item.isActive),
+    });
+    setActiveSection("pricing");
+    setPackageError("");
+    setPackageSuccess("");
+  };
+
+  const handleTogglePaymentPackage = async (item) => {
+    try {
+      setIsSavingPackage(true);
+      setPackageError("");
+      setPackageSuccess("");
+      await fetchJson(`/api/v1/admin/payment-packages/${item.code}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ isActive: !item.isActive }),
+      });
+      setPackageSuccess(
+        item.isActive ? "Đã tắt gói giá." : "Đã bật lại gói giá.",
+      );
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setPackageError(
+        error instanceof Error ? error.message : "Không thể cập nhật gói giá.",
+      );
+    } finally {
+      setIsSavingPackage(false);
+    }
+  };
+
+  const handleDeletePaymentPackage = async (item) => {
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa gói "${item.name}" (${item.code})?`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setIsSavingPackage(true);
+      setPackageError("");
+      setPackageSuccess("");
+      await fetchJson(`/api/v1/admin/payment-packages/${item.code}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+        },
+      });
+      if (editingPackageCode === item.code) {
+        resetPackageForm();
+      }
+      setPackageSuccess("Đã xóa gói giá.");
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setPackageError(
+        error instanceof Error ? error.message : "Không thể xóa gói giá.",
+      );
+    } finally {
+      setIsSavingPackage(false);
+    }
+  };
+
+  const handleCreatePaymentPackage = async (event) => {
+    event.preventDefault();
+
+    try {
+      setIsSavingPackage(true);
+      setPackageError("");
+      setPackageSuccess("");
+
+      const payload = {
+        name: packageForm.name.trim(),
+        amount: Number(packageForm.amount),
+        currency: packageForm.currency.trim() || "VND",
+        durationDays: Number(packageForm.durationDays),
+        poiQuota: Number(packageForm.poiQuota),
+        description: packageForm.description.trim() || undefined,
+        isActive: Boolean(packageForm.isActive),
+      };
+
+      const path = editingPackageCode
+        ? `/api/v1/admin/payment-packages/${editingPackageCode}`
+        : "/api/v1/admin/payment-packages";
+
+      await fetchJson(path, {
+        method: editingPackageCode ? "PUT" : "POST",
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      resetPackageForm();
+      setPackageSuccess(
+        editingPackageCode
+          ? "Đã cập nhật gói giá thành công."
+          : "Đã tạo gói giá thành công.",
+      );
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setPackageError(
+        error instanceof Error ? error.message : "Không thể lưu gói giá.",
+      );
+    } finally {
+      setIsSavingPackage(false);
+    }
+  };
+
   const totalPois = adminPois.length;
   const publishedPois = adminPois.filter((poi) => poi.isPublished).length;
 
@@ -493,6 +689,17 @@ export default function AdminDashboard() {
         delta: totalPois
           ? `${Math.round((publishedPois / totalPois) * 100)}% nội dung đã xuất bản`
           : "Chưa có POI",
+      };
+    }
+
+    if (card.key === "paymentPackages") {
+      const activePackages = paymentPackages.filter((item) => item.isActive);
+      return {
+        ...card,
+        value: formatNumber(activePackages.length),
+        delta: paymentPackages.length
+          ? `${formatNumber(paymentPackages.length)} gói đã cấu hình`
+          : "Chưa có gói giá",
       };
     }
 
@@ -699,6 +906,20 @@ export default function AdminDashboard() {
       tone: getPartnerRegistrationTone(item.status),
       label: getPartnerRegistrationLabel(item.status),
     }));
+
+  const paymentPackageRows = useMemo(
+    () =>
+      [...paymentPackages]
+        .sort((a, b) => {
+          if (a.isActive !== b.isActive) {
+            return Number(b.isActive) - Number(a.isActive);
+          }
+
+          return a.amount - b.amount;
+        })
+        .slice(0, 8),
+    [paymentPackages],
+  );
 
   // Protect this page - only ADMIN users can access
   if (userRole !== "ADMIN") {
@@ -1051,6 +1272,270 @@ export default function AdminDashboard() {
                   })}
                 </div>
               )}
+            </section>
+          )}
+
+          {activeSection === "pricing" && (
+            <section className="mt-6 grid gap-6 xl:grid-cols-[0.95fr_1.05fr]">
+              <div className="rounded-[34px] border border-white/10 bg-linear-to-br from-cyan-500/18 via-slate-900/70 to-slate-950/80 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+                <p className="text-sm font-semibold uppercase tracking-[0.24em] text-cyan-100/70">
+                  Cấu hình giá gói
+                </p>
+                <h2 className="mt-2 text-2xl font-black text-white">
+                  Tạo gói thanh toán mới
+                </h2>
+                <p className="mt-3 max-w-xl text-sm leading-relaxed text-white/65">
+                  Mã gói sẽ được hệ thống tạo tự động. Admin chỉ cần đặt tên,
+                  giá, số ngày hiệu lực và số POI tối đa được phép xuất bản.
+                </p>
+                {editingPackageCode && (
+                  <div className="mt-4 rounded-2xl border border-cyan-300/20 bg-cyan-400/10 px-4 py-3 text-sm text-cyan-100">
+                    Đang chỉnh sửa gói: {editingPackageCode}
+                    <button
+                      type="button"
+                      onClick={resetPackageForm}
+                      className="ml-3 font-semibold underline underline-offset-4"
+                    >
+                      Hủy chỉnh sửa
+                    </button>
+                  </div>
+                )}
+
+                <form
+                  className="mt-6 space-y-4"
+                  onSubmit={handleCreatePaymentPackage}
+                >
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        Tên gói
+                      </span>
+                      <input
+                        type="text"
+                        value={packageForm.name}
+                        onChange={(e) =>
+                          handlePackageFormChange("name", e.target.value)
+                        }
+                        placeholder="Premium 30 ngày"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        Giá
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={packageForm.amount}
+                        onChange={(e) =>
+                          handlePackageFormChange("amount", e.target.value)
+                        }
+                        placeholder="99000"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        Tiền tệ
+                      </span>
+                      <input
+                        type="text"
+                        value={packageForm.currency}
+                        onChange={(e) =>
+                          handlePackageFormChange("currency", e.target.value)
+                        }
+                        placeholder="VND"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        Số ngày hiệu lực
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={packageForm.durationDays}
+                        onChange={(e) =>
+                          handlePackageFormChange(
+                            "durationDays",
+                            e.target.value,
+                          )
+                        }
+                        placeholder="30"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                        Số POI được phép
+                      </span>
+                      <input
+                        type="number"
+                        min="1"
+                        value={packageForm.poiQuota}
+                        onChange={(e) =>
+                          handlePackageFormChange("poiQuota", e.target.value)
+                        }
+                        placeholder="5"
+                        className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Mô tả
+                    </span>
+                    <textarea
+                      value={packageForm.description}
+                      onChange={(e) =>
+                        handlePackageFormChange("description", e.target.value)
+                      }
+                      rows="4"
+                      placeholder="Dùng cho gói premium 30 ngày"
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </label>
+
+                  <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-black/10 px-4 py-3">
+                    <input
+                      type="checkbox"
+                      checked={packageForm.isActive}
+                      onChange={(e) =>
+                        handlePackageFormChange("isActive", e.target.checked)
+                      }
+                      className="h-4 w-4 rounded border-white/20 bg-slate-950/55 text-cyan-400"
+                    />
+                    <span className="text-sm font-semibold text-white/80">
+                      Kích hoạt ngay sau khi tạo
+                    </span>
+                  </label>
+
+                  {(packageError || packageSuccess) && (
+                    <div
+                      className={`rounded-2xl border p-4 text-sm ${
+                        packageError
+                          ? "border-rose-300/20 bg-rose-400/10 text-rose-100"
+                          : "border-emerald-300/20 bg-emerald-400/10 text-emerald-100"
+                      }`}
+                    >
+                      {packageError || packageSuccess}
+                    </div>
+                  )}
+
+                  <button
+                    type="submit"
+                    disabled={isSavingPackage}
+                    className="inline-flex items-center gap-2 rounded-2xl bg-linear-to-r from-cyan-500 to-sky-500 px-5 py-3 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:brightness-105 disabled:opacity-50"
+                  >
+                    {isSavingPackage
+                      ? "Đang lưu..."
+                      : editingPackageCode
+                        ? "Lưu gói giá"
+                        : "Tạo gói giá"}
+                  </button>
+                </form>
+              </div>
+
+              <div className="rounded-[34px] border border-white/10 bg-white/6 p-5 md:p-6 backdrop-blur-xl shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold uppercase tracking-[0.24em] text-white/45">
+                      Danh sách gói
+                    </p>
+                    <h2 className="mt-2 text-2xl font-black text-white">
+                      Gói giá đang cấu hình
+                    </h2>
+                  </div>
+                  <StatusPill
+                    tone={paymentPackageRows.length ? "emerald" : "slate"}
+                  >
+                    {formatNumber(paymentPackageRows.length)} gói
+                  </StatusPill>
+                </div>
+
+                <div className="mt-5 grid gap-3">
+                  {paymentPackageRows.length === 0 ? (
+                    <div className="rounded-3xl border border-white/8 bg-black/10 p-4 text-sm text-white/60">
+                      Chưa có gói giá nào được tạo.
+                    </div>
+                  ) : (
+                    paymentPackageRows.map((item) => (
+                      <div
+                        key={item.code}
+                        className="rounded-3xl border border-white/8 bg-black/10 p-4"
+                      >
+                        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                          <div className="min-w-0 flex-1">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <p className="text-sm font-semibold text-white">
+                                {item.name}
+                              </p>
+                              <StatusPill
+                                tone={item.isActive ? "emerald" : "slate"}
+                              >
+                                {item.isActive ? "Đang bật" : "Tắt"}
+                              </StatusPill>
+                            </div>
+                            <p className="mt-1 text-xs uppercase tracking-[0.2em] text-white/45">
+                              {item.code}
+                            </p>
+                            <p className="mt-3 text-sm font-bold text-cyan-100">
+                              {formatCurrency(item.amount, item.currency)}
+                            </p>
+                            <p className="mt-1 text-sm text-white/60">
+                              Thời hạn: {formatNumber(item.durationDays)} ngày
+                            </p>
+                            <p className="mt-1 text-sm text-white/60">
+                              Tối đa {formatNumber(item.poiQuota)} POI
+                            </p>
+                            <p className="mt-1 text-xs text-white/45">
+                              Tạo {formatRelativeTime(item.createdAt)}
+                              {item.createdBy ? ` • bởi ${item.createdBy}` : ""}
+                            </p>
+                            {item.description && (
+                              <p className="mt-2 text-sm leading-relaxed text-white/70">
+                                {item.description}
+                              </p>
+                            )}
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditPaymentPackage(item)}
+                                className="rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
+                              >
+                                Sửa
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleTogglePaymentPackage(item)}
+                                className="rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
+                              >
+                                {item.isActive ? "Tắt" : "Bật"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeletePaymentPackage(item)}
+                                className="rounded-xl border border-rose-300/20 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/15"
+                              >
+                                Xóa
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
             </section>
           )}
 

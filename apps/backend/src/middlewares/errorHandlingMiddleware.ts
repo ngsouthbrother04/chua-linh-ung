@@ -1,41 +1,91 @@
-import { NextFunction, Request, Response } from 'express';
-import ApiError from '../utils/ApiError';
+import { NextFunction, Request, Response } from "express";
+import ApiError from "../utils/ApiError";
 
-const KNOWN_ERROR_CODE_MAP: Record<string, { statusCode: number; message: string }> = {
-  INVALID_CLAIM_CODE: { statusCode: 400, message: 'Định dạng mã không hợp lệ.' },
-  CLAIM_CODE_NOT_FOUND_OR_USED: {
-    statusCode: 401,
-    message: 'Mã không hợp lệ hoặc đã được sử dụng.'
+const KNOWN_ERROR_CODE_MAP: Record<
+  string,
+  { statusCode: number; message: string }
+> = {
+  INVALID_PAYMENT_AMOUNT: {
+    statusCode: 400,
+    message: "amount phải là số dương.",
   },
-  INVALID_PAYMENT_AMOUNT: { statusCode: 400, message: 'amount phải là số dương.' },
-  PAYMENT_NOT_FOUND: { statusCode: 404, message: 'Không tìm thấy giao dịch thanh toán.' },
-  PAYMENT_ALREADY_FINALIZED: { statusCode: 409, message: 'Giao dịch đã chốt ở trạng thái khác.' },
-  POI_NOT_FOUND: { statusCode: 404, message: 'Không tìm thấy POI cần xử lý TTS.' },
-  TOUR_NOT_FOUND: { statusCode: 404, message: 'Không tìm thấy Tour cần xử lý ảnh.' },
+  INVALID_PAYMENT_PACKAGE_CODE: {
+    statusCode: 400,
+    message: "Mã gói không hợp lệ.",
+  },
+  INVALID_PAYMENT_PACKAGE_NAME: {
+    statusCode: 400,
+    message: "Tên gói không hợp lệ.",
+  },
+  INVALID_PAYMENT_PACKAGE_AMOUNT: {
+    statusCode: 400,
+    message: "Giá gói phải là số dương.",
+  },
+  INVALID_PAYMENT_PACKAGE_DURATION: {
+    statusCode: 400,
+    message: "Thời hạn gói phải là số nguyên dương.",
+  },
+  INVALID_PAYMENT_PACKAGE_POI_QUOTA: {
+    statusCode: 400,
+    message: "Số POI của gói phải là số nguyên dương.",
+  },
+  PAYMENT_PACKAGE_CODE_GENERATION_FAILED: {
+    statusCode: 500,
+    message: "Không thể tự tạo mã gói.",
+  },
+  PAYMENT_PACKAGE_CODE_EXISTS: {
+    statusCode: 409,
+    message: "Mã gói đã tồn tại.",
+  },
+  PAYMENT_PACKAGE_NOT_FOUND: {
+    statusCode: 404,
+    message: "Không tìm thấy gói thanh toán hoạt động.",
+  },
+  PAYMENT_NOT_FOUND: {
+    statusCode: 404,
+    message: "Không tìm thấy giao dịch thanh toán.",
+  },
+  PAYMENT_ALREADY_FINALIZED: {
+    statusCode: 409,
+    message: "Giao dịch đã chốt ở trạng thái khác.",
+  },
+  POI_NOT_FOUND: {
+    statusCode: 404,
+    message: "Không tìm thấy POI cần xử lý TTS.",
+  },
+  TOUR_NOT_FOUND: {
+    statusCode: 404,
+    message: "Không tìm thấy Tour cần xử lý ảnh.",
+  },
   TTS_NO_SUPPORTED_LANGUAGE_TEXT: {
     statusCode: 400,
-    message: 'POI không có nội dung phù hợp để generate TTS theo danh sách ngôn ngữ hỗ trợ.'
+    message:
+      "POI không có nội dung phù hợp để generate TTS theo danh sách ngôn ngữ hỗ trợ.",
   },
   REDIS_URL_NOT_CONFIGURED: {
     statusCode: 500,
-    message: 'Thiếu REDIS_URL cho chế độ queue BullMQ.'
+    message: "Thiếu REDIS_URL cho chế độ queue BullMQ.",
   },
   CLOUDINARY_NOT_CONFIGURED: {
     statusCode: 500,
-    message: 'Thiếu cấu hình Cloudinary cho upload ảnh.'
+    message: "Thiếu cấu hình Cloudinary cho upload ảnh.",
   },
   CLOUDINARY_UPLOAD_FAILED: {
     statusCode: 502,
-    message: 'Upload ảnh lên Cloudinary thất bại.'
-  }
+    message: "Upload ảnh lên Cloudinary thất bại.",
+  },
 };
 
-function normalizeError(err: unknown): { statusCode: number; message: string; stack?: string } {
+function normalizeError(err: unknown): {
+  statusCode: number;
+  message: string;
+  stack?: string;
+} {
   if (err instanceof ApiError) {
     return {
       statusCode: err.statusCode,
       message: err.message,
-      stack: err.stack
+      stack: err.stack,
     };
   }
 
@@ -44,36 +94,51 @@ function normalizeError(err: unknown): { statusCode: number; message: string; st
     return {
       statusCode: mapped.statusCode,
       message: mapped.message,
-      stack: err.stack
+      stack: err.stack,
     };
   }
 
   if (err instanceof Error) {
     return {
       statusCode: 500,
-      message: err.message || 'Lỗi máy chủ nội bộ.',
-      stack: err.stack
+      message: err.message || "Lỗi máy chủ nội bộ.",
+      stack: err.stack,
     };
   }
 
   return {
     statusCode: 500,
-    message: 'Lỗi máy chủ nội bộ.'
+    message: "Lỗi máy chủ nội bộ.",
   };
 }
 
-export function notFoundMiddleware(req: Request, res: Response, next: NextFunction): void {
-  next(new ApiError(404, `Không tìm thấy endpoint: ${req.method} ${req.originalUrl}`));
+export function notFoundMiddleware(
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
+  next(
+    new ApiError(
+      404,
+      `Không tìm thấy endpoint: ${req.method} ${req.originalUrl}`,
+    ),
+  );
 }
 
-export function errorHandlingMiddleware(err: unknown, req: Request, res: Response, next: NextFunction): void {
+export function errorHandlingMiddleware(
+  err: unknown,
+  req: Request,
+  res: Response,
+  next: NextFunction,
+): void {
   const normalized = normalizeError(err);
-  const responseError: { statusCode: number; message: string; stack?: string } = {
-    statusCode: normalized.statusCode,
-    message: normalized.message
-  };
+  const responseError: { statusCode: number; message: string; stack?: string } =
+    {
+      statusCode: normalized.statusCode,
+      message: normalized.message,
+    };
 
-  if (process.env.NODE_ENV !== 'production' && normalized.stack) {
+  if (process.env.NODE_ENV !== "production" && normalized.stack) {
     responseError.stack = normalized.stack;
   }
 
