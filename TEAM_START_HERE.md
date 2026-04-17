@@ -347,6 +347,7 @@ JavaScript
 baseURL: "http://192.168.1.15:3000"
 (Lưu ý: Điện thoại và máy tính phải bắt chung một mạng WiFi).
 
+mở cmd gõ ipconfig
 ## Bước B - Cài đặt thư viện bổ sung (Nếu cần)
 Nếu project có thay đổi các module native, chạy lệnh:
 

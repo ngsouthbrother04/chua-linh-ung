@@ -10,6 +10,7 @@ import { CommonActions } from '@react-navigation/native';
 import API from "../api/api";
 import { autoTranslate } from "../utils/translator";
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { Ionicons } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get("window");
 
@@ -107,7 +108,6 @@ export default function HomeScreen({ navigation }) {
     translateUI();
   }, [lang]);
 
-  // Quan trọng: Chỉ dịch, KHÔNG tự phát ở đây để tránh lỗi đổi ngôn ngữ bị phát lại
   useEffect(() => {
     if (selectedPoi) handleAutoTranslate(selectedPoi, false);
   }, [selectedPoi, lang]);
@@ -154,7 +154,7 @@ export default function HomeScreen({ navigation }) {
     if (foundPoi) {
       lastPlayedPoiId.current = foundPoi.id;
       setSelectedPoi(foundPoi);
-      handleAutoTranslate(foundPoi, true); // PHÁT LUÔN
+      handleAutoTranslate(foundPoi, true); 
       mapRef.current?.animateToRegion({
         latitude: parseFloat(foundPoi.latitude), longitude: parseFloat(foundPoi.longitude),
         latitudeDelta: 0.005, longitudeDelta: 0.005
@@ -183,7 +183,7 @@ export default function HomeScreen({ navigation }) {
       if (lastPlayedPoiId.current !== nearestPoi.id) {
         lastPlayedPoiId.current = nearestPoi.id;
         setSelectedPoi(nearestPoi);
-        handleAutoTranslate(nearestPoi, true); // PHÁT LUÔN
+        handleAutoTranslate(nearestPoi, true); 
 
         let title = "📍 Vào vùng ảnh hưởng";
         if (lang.code !== 'vi') { try { title = await autoTranslate(title, lang.code); } catch (e) {} }
@@ -209,44 +209,23 @@ export default function HomeScreen({ navigation }) {
     } catch (e) { console.log(e); } finally { setLoading(false); }
   };
 
-const loadUserData = async () => {
+  const loadUserData = async () => {
     try {
-      // BƯỚC 1: Lấy ngay từ bộ nhớ máy để hiện lên liền, không bắt user chờ API
       const localName = await AsyncStorage.getItem('userName');
       const localEmail = await AsyncStorage.getItem('userEmail');
-      
       if (localName) {
-        setUserData({ 
-          name: localName, 
-          email: localEmail || "" 
-        });
+        setUserData({ name: localName, email: localEmail || "" });
       }
-
-      // BƯỚC 2: Gọi API chạy ngầm để cập nhật dữ liệu mới nhất (nếu có thay đổi)
       const token = await AsyncStorage.getItem('userToken');
       if (!token) return;
-
-      const res = await API.get("/users/profile", { 
-        headers: { Authorization: `Bearer ${token}` } 
-      });
-
+      const res = await API.get("/users/profile", { headers: { Authorization: `Bearer ${token}` } });
       if (res.data?.status === "success") {
         const { fullName, email } = res.data.data;
-        
-        // Cập nhật lại State nếu dữ liệu API khác dữ liệu Local
-        setUserData({ 
-          name: fullName || localName || "Người dùng", 
-          email: email || localEmail || "" 
-        });
-
-        // Cập nhật ngược lại Local để lần sau mở App là có dữ liệu mới nhất
+        setUserData({ name: fullName || localName || "Người dùng", email: email || localEmail || "" });
         await AsyncStorage.setItem('userName', fullName || "");
         await AsyncStorage.setItem('userEmail', email || "");
       }
-    } catch (e) {
-      console.log("Lỗi tải profile:", e);
-      // Nếu API lỗi thì vẫn giữ dữ liệu đã lấy từ Local ở Bước 1, không làm gì thêm
-    }
+    } catch (e) { console.log("Lỗi tải profile:", e); }
   };
 
   const handleToggleSpeech = () => {
@@ -269,14 +248,16 @@ const loadUserData = async () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar translucent backgroundColor="transparent" barStyle="dark-content" />
 
+      {/* SEARCH SECTION UPGRADED */}
       <View style={styles.searchSection}>
         <View style={styles.topRow}>
           <TouchableOpacity style={styles.roundBtn} onPress={() => setIsMenuVisible(true)}>
-            <Text style={{fontSize: 20}}>☰</Text>
+            <Ionicons name="menu" size={26} color="#333" />
           </TouchableOpacity>
           <View style={styles.searchBar}>
+            <Ionicons name="search" size={18} color="#999" />
             <TextInput
               placeholder={uiLabels.searchPlaceholder} style={styles.input}
               value={searchQuery} onChangeText={(text) => {
@@ -300,7 +281,8 @@ const loadUserData = async () => {
                   setSelectedPoi(item); setIsDropdownVisible(false); setSearchQuery("");
                   mapRef.current?.animateToRegion({ latitude: parseFloat(item.latitude), longitude: parseFloat(item.longitude), latitudeDelta: 0.005, longitudeDelta: 0.005 }, 1000);
                 }}>
-                  <Text style={styles.dropItemText}>{typeof item.name === 'object' ? (item.name?.vi || item.name?.en) : item.name}</Text>
+                  <Ionicons name="location-outline" size={16} color="#FF6F00" />
+                  <Text style={styles.dropItemText}> {typeof item.name === 'object' ? (item.name?.vi || item.name?.en) : item.name}</Text>
                 </TouchableOpacity>
               )}
             />
@@ -313,80 +295,92 @@ const loadUserData = async () => {
         onPress={(e) => setUserLocation(e.nativeEvent.coordinate)}
         initialRegion={{ latitude: 10.7712, longitude: 106.6901, latitudeDelta: 0.05, longitudeDelta: 0.05 }}
       >
-        {userLocation && <Marker coordinate={userLocation} pinColor="blue" title="Bạn ở đây" />}
+        {userLocation && (
+          <Marker coordinate={userLocation}>
+            <View style={styles.userLocationMarker}>
+              <View style={styles.userLocationDot} />
+            </View>
+          </Marker>
+        )}
         {pois.map((p) => (
           <React.Fragment key={p.id}>
-            <Circle center={{ latitude: parseFloat(p.latitude), longitude: parseFloat(p.longitude) }} radius={100} strokeColor="rgba(255, 111, 0, 0.5)" fillColor="rgba(255, 111, 0, 0.2)" />
+            <Circle center={{ latitude: parseFloat(p.latitude), longitude: parseFloat(p.longitude) }} radius={100} strokeColor="rgba(255, 111, 0, 0.4)" fillColor="rgba(255, 111, 0, 0.15)" />
             <Marker coordinate={{ latitude: parseFloat(p.latitude), longitude: parseFloat(p.longitude) }} onPress={() => {
                 const dist = getDistance(parseFloat(userLocation.latitude), parseFloat(userLocation.longitude), parseFloat(p.latitude), parseFloat(p.longitude));
                 if (dist <= 100) {
                     lastPlayedPoiId.current = p.id;
                     setSelectedPoi(p);
-                    handleAutoTranslate(p, true); // CHẠM TRONG VÙNG: PHÁT LUÔN
+                    handleAutoTranslate(p, true); 
                 } else {
                     setSelectedPoi(p);
                 }
             }}>
-              <View style={[styles.customMarker, selectedPoi?.id === p.id && styles.activeMarker]}><Text>📍</Text></View>
+              <View style={[styles.customMarker, selectedPoi?.id === p.id && styles.activeMarker]}>
+                <Ionicons name="restaurant" size={14} color={selectedPoi?.id === p.id ? "#fff" : "#FF6F00"} />
+              </View>
             </Marker>
           </React.Fragment>
         ))}
       </MapView>
 
+      {/* INFO BOTTOM SHEET UPGRADED */}
       <View style={styles.infoContainer}>
         <View style={styles.handle} />
-        <ScrollView contentContainerStyle={{padding: 25}}>
-          <View style={styles.badge}><Text style={styles.badgeText}>{selectedPoi?.type || 'POI'}</Text></View>
-          <Text style={styles.poiName}>{translatedData.name}</Text>
+        <ScrollView contentContainerStyle={{padding: 20}}>
+          <View style={styles.infoTopRow}>
+            <View style={styles.badge}><Text style={styles.badgeText}>{selectedPoi?.type || 'POI'}</Text></View>
+            {selectedPoi && <Text style={styles.distanceText}>{getDistance(userLocation.latitude, userLocation.longitude, parseFloat(selectedPoi.latitude), parseFloat(selectedPoi.longitude)).toFixed(0)}m</Text>}
+          </View>
+          <Text style={styles.poiName}>{translatedData.name || 'Chào mừng!'}</Text>
           <View style={styles.divider} />
           <Text style={styles.descLabel}>{uiLabels.details}</Text>
-          {isTranslating ? <ActivityIndicator size="small" color="#FF6F00" /> : <Text style={styles.poiDesc}>{translatedData.desc}</Text>}
+          {isTranslating ? <ActivityIndicator size="small" color="#FF6F00" /> : <Text style={styles.poiDesc}>{translatedData.desc || 'Chọn một địa điểm trên bản đồ để khám phá câu chuyện và nghe thuyết minh tự động.'}</Text>}
+          
           <TouchableOpacity style={[styles.audioBtn, isSpeaking && styles.audioBtnActive]} onPress={handleToggleSpeech}>
-            <Text style={[styles.audioBtnText, isSpeaking && {color: '#fff'}]}>{isSpeaking ? uiLabels.stop : uiLabels.listen}</Text>
+            <Ionicons name={isSpeaking ? "stop-circle" : "volume-high"} size={24} color={isSpeaking ? "#fff" : "#FF6F00"} />
+            <Text style={[styles.audioBtnText, isSpeaking && {color: '#fff'}]}> {isSpeaking ? uiLabels.stop : uiLabels.listen}</Text>
           </TouchableOpacity>
         </ScrollView>
       </View>
 
-      <Modal visible={isMenuVisible} animationType="slide" transparent>
+      {/* SIDE MENU MODAL UPGRADED */}
+      <Modal visible={isMenuVisible} animationType="fade" transparent>
         <View style={styles.menuOverlay}>
           <View style={styles.menuSideBar}>
             <View style={styles.menuHeader}>
-              <View style={styles.avatarCircle}><Text style={styles.avatarText}>{userData.name.charAt(0)}</Text></View>
+              <View style={styles.avatarCircle}>
+                <Text style={styles.avatarText}>{userData.name.charAt(0).toUpperCase()}</Text>
+              </View>
               <Text style={styles.menuName}>{userData.name}</Text>
               <Text style={styles.menuEmail}>{userData.email}</Text>
             </View>
             <View style={styles.menuBody}>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setIsMenuVisible(false); navigation.navigate('Profile', { currentLang: lang }); }}>
-                <Text style={styles.menuItemIcon}>👤</Text><Text style={styles.menuItemText}>{uiLabels.profileLink}</Text>
+                <Ionicons name="person-circle-outline" size={24} color="#555" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>{uiLabels.profileLink}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setIsMenuVisible(false); 
                 if (!permission?.granted) requestPermission(); else setIsScannerVisible(true); setScanned(false);
               }}>
-                <Text style={styles.menuItemIcon}>📷</Text><Text style={styles.menuItemText}>{uiLabels.scanQR}</Text>
+                <Ionicons name="qr-code-outline" size={24} color="#555" style={styles.menuItemIcon} />
+                <Text style={styles.menuItemText}>{uiLabels.scanQR}</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setIsMenuVisible(false); setIsLangModalVisible(true); }}>
-                <Text style={styles.menuItemIcon}>{lang.flag}</Text><Text style={styles.menuItemText}>{uiLabels.langTitle}</Text>
+                <Text style={[styles.menuItemIcon, {fontSize: 20}]}>{lang.flag}</Text>
+                <Text style={styles.menuItemText}>{uiLabels.langTitle}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
-                <Text style={styles.menuItemIcon}>🚪</Text><Text style={[styles.menuItemText, {color: '#FF3B30'}]}>{uiLabels.logout}</Text>
+              <View style={styles.menuSpacer} />
+              <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
+                <Ionicons name="log-out-outline" size={24} color="#FF3B30" style={styles.menuItemIcon} />
+                <Text style={[styles.menuItemText, {color: '#FF3B30'}]}>{uiLabels.logout}</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.closeMenuBtn} onPress={() => setIsMenuVisible(false)}><Text>Đóng</Text></TouchableOpacity>
             </View>
           </View>
-          <TouchableOpacity style={{flex:1}} onPress={() => setIsMenuVisible(false)} />
+          <TouchableOpacity style={{flex:1}} activeOpacity={1} onPress={() => setIsMenuVisible(false)} />
         </View>
       </Modal>
 
-      <Modal visible={isScannerVisible} animationType="slide">
-        <View style={{ flex: 1, backgroundColor: '#000' }}>
-          <CameraView onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} />
-          <View style={styles.scannerOverlay}>
-            <View style={{width: 220, height: 220, borderWidth: 2, borderColor: '#fff', borderRadius: 20, marginBottom: 40, borderStyle: 'dashed'}} />
-            <TouchableOpacity style={styles.closeScannerBtn} onPress={() => setIsScannerVisible(false)}><Text style={{color: '#fff'}}>HỦY BỎ</Text></TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
+      {/* LANGUAGE MODAL UPGRADED */}
       <Modal visible={isLangModalVisible} animationType="fade" transparent>
         <TouchableOpacity style={styles.modalBg} activeOpacity={1} onPress={() => setIsLangModalVisible(false)}>
           <TouchableWithoutFeedback><View style={styles.modalContent}>
@@ -394,60 +388,94 @@ const loadUserData = async () => {
               <FlatList data={LANGUAGES} numColumns={2} keyExtractor={(i) => i.code} renderItem={({ item }) => (
                   <TouchableOpacity style={[styles.langGridItem, lang.code === item.code && styles.langGridItemActive]} 
                     onPress={() => { setLang(item); setIsLangModalVisible(false); Speech.stop(); }}>
-                    <Text style={{fontSize: 30}}>{item.flag}</Text><Text style={styles.langNameText}>{item.name}</Text>
+                    <Text style={{fontSize: 32}}>{item.flag}</Text>
+                    <Text style={styles.langNameText}>{item.name}</Text>
+                    {lang.code === item.code && <Ionicons name="checkmark-circle" size={20} color="#FF6F00" style={styles.checkIcon} />}
                   </TouchableOpacity>
                 )}
               /></View>
           </TouchableWithoutFeedback>
         </TouchableOpacity>
       </Modal>
+
+      {/* SCANNER MODAL UPGRADED */}
+      <Modal visible={isScannerVisible} animationType="slide">
+        <View style={{ flex: 1, backgroundColor: '#000' }}>
+          <CameraView onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} style={StyleSheet.absoluteFillObject} barcodeScannerSettings={{ barcodeTypes: ["qr"] }} />
+          <View style={styles.scannerOverlay}>
+            <View style={styles.scanTarget} />
+            <Text style={styles.scanText}>Đặt mã QR vào khung hình để quét</Text>
+            <TouchableOpacity style={styles.closeScannerBtn} onPress={() => setIsScannerVisible(false)}>
+              <Ionicons name="close" size={24} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff" },
+  container: { flex: 1, backgroundColor: "#f8f9fa" },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  searchSection: { position: 'absolute', top: 50, left: 15, right: 15, zIndex: 10 },
+  searchSection: { position: 'absolute', top: 60, left: 20, right: 20, zIndex: 10 },
   topRow: { flexDirection: 'row', alignItems: 'center' },
-  searchBar: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 25, height: 50, alignItems: 'center', paddingHorizontal: 20, marginLeft: 10, elevation: 10 },
-  input: { flex: 1, fontSize: 14 },
-  roundBtn: { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 25, justifyContent: 'center', alignItems: 'center', elevation: 10 },
-  dropdown: { backgroundColor: '#fff', borderRadius: 15, marginTop: 10, elevation: 10, maxHeight: 200 },
-  dropItem: { padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
-  dropItemText: { fontWeight: '500' },
-  map: { width: width, height: height * 0.65 },
-  customMarker: { backgroundColor: '#fff', padding: 5, borderRadius: 20, borderWidth: 2, borderColor: '#FF6F00', justifyContent: 'center', alignItems: 'center' },
-  activeMarker: { backgroundColor: '#FF6F00' },
-  infoContainer: { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 30, borderTopRightRadius: 30, marginTop: -30, elevation: 25 },
-  handle: { width: 40, height: 5, backgroundColor: '#EEE', borderRadius: 5, alignSelf: 'center', marginTop: 10 },
-  badge: { backgroundColor: '#FFF3E0', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 8, marginBottom: 5 },
-  badgeText: { color: '#FF6F00', fontSize: 10, fontWeight: 'bold' },
-  poiName: { fontSize: 22, fontWeight: 'bold', color: '#333' },
-  divider: { height: 1, backgroundColor: '#F0F0F0', marginVertical: 15 },
-  descLabel: { fontSize: 10, color: '#999', marginBottom: 5, fontWeight: 'bold' },
-  poiDesc: { fontSize: 15, color: '#555', lineHeight: 22, marginBottom: 20 },
-  audioBtn: { backgroundColor: '#FFF3E0', padding: 15, borderRadius: 15, alignItems: 'center', borderWidth: 1, borderColor: '#FF6F00' },
+  searchBar: { flex: 1, flexDirection: 'row', backgroundColor: '#fff', borderRadius: 15, height: 50, alignItems: 'center', paddingHorizontal: 15, marginLeft: 12, elevation: 8, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 8 },
+  input: { flex: 1, fontSize: 15, marginLeft: 10, color: '#333' },
+  roundBtn: { width: 50, height: 50, backgroundColor: '#fff', borderRadius: 15, justifyContent: 'center', alignItems: 'center', elevation: 8, shadowColor: '#000', shadowOffset: {width: 0, height: 4}, shadowOpacity: 0.1, shadowRadius: 8 },
+  dropdown: { backgroundColor: '#fff', borderRadius: 15, marginTop: 8, elevation: 10, maxHeight: 250, padding: 5 },
+  dropItem: { flexDirection: 'row', alignItems: 'center', padding: 15, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
+  dropItemText: { fontWeight: '500', color: '#333' },
+  map: { width: width, height: height * 0.7 },
+  
+  // Custom User Marker
+  userLocationMarker: { width: 30, height: 30, backgroundColor: 'rgba(0, 122, 255, 0.2)', borderRadius: 15, justifyContent: 'center', alignItems: 'center' },
+  userLocationDot: { width: 14, height: 14, backgroundColor: '#007AFF', borderRadius: 7, borderSize: 3, borderColor: '#fff' },
+
+  customMarker: { backgroundColor: '#fff', padding: 8, borderRadius: 12, borderWidth: 1, borderColor: '#FF6F00', justifyContent: 'center', alignItems: 'center', elevation: 5 },
+  activeMarker: { backgroundColor: '#FF6F00', borderColor: '#fff' },
+  
+  infoContainer: { flex: 1, backgroundColor: "#fff", borderTopLeftRadius: 35, borderTopRightRadius: 35, marginTop: -40, elevation: 30, shadowColor: '#000', shadowOffset: {width: 0, height: -10}, shadowOpacity: 0.1, shadowRadius: 15 },
+  handle: { width: 50, height: 5, backgroundColor: '#E0E0E0', borderRadius: 5, alignSelf: 'center', marginTop: 12 },
+  infoTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 },
+  distanceText: { color: '#999', fontSize: 12, fontWeight: '600' },
+  badge: { backgroundColor: '#FFF3E0', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10 },
+  badgeText: { color: '#FF6F00', fontSize: 11, fontWeight: 'bold', textTransform: 'uppercase' },
+  poiName: { fontSize: 24, fontWeight: 'bold', color: '#2D3436', marginBottom: 5 },
+  divider: { height: 1, backgroundColor: '#F1F2F6', marginVertical: 15 },
+  descLabel: { fontSize: 11, color: '#B2BEC3', marginBottom: 8, fontWeight: 'bold', letterSpacing: 1 },
+  poiDesc: { fontSize: 15, color: '#636E72', lineHeight: 24, marginBottom: 25 },
+  audioBtn: { flexDirection: 'row', backgroundColor: '#FFF3E0', padding: 16, borderRadius: 18, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF6F00' },
   audioBtnActive: { backgroundColor: '#FF6F00' },
-  audioBtnText: { color: '#FF6F00', fontWeight: 'bold' },
-  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', flexDirection: 'row' },
-  menuSideBar: { width: width * 0.75, backgroundColor: '#fff', height: '100%', elevation: 20 },
-  menuHeader: { padding: 40, paddingTop: 60, backgroundColor: '#FFF3E0', alignItems: 'center' },
-  avatarCircle: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FF6F00', justifyContent: 'center', alignItems: 'center', marginBottom: 15 },
-  avatarText: { color: '#fff', fontSize: 35, fontWeight: 'bold' },
-  menuName: { fontSize: 20, fontWeight: 'bold' },
-  menuEmail: { color: '#666', fontSize: 12 },
-  menuBody: { padding: 20 },
-  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, borderBottomWidth: 0.5, borderBottomColor: '#F0F0F0' },
-  menuItemIcon: { fontSize: 20, marginRight: 15 },
-  menuItemText: { fontSize: 16, fontWeight: '500' },
-  closeMenuBtn: { marginTop: 30, alignSelf: 'center' },
-  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' },
-  modalContent: { backgroundColor: '#fff', borderRadius: 25, padding: 20, width: '85%', maxHeight: '70%' },
-  modalTitle: { textAlign: 'center', fontWeight: 'bold', marginBottom: 15, fontSize: 16 },
-  langGridItem: { flex: 1, alignItems: 'center', padding: 15, margin: 5, borderRadius: 15, borderWidth: 1, borderColor: '#EEE' },
+  audioBtnText: { color: '#FF6F00', fontWeight: 'bold', fontSize: 16 },
+
+  // Sidebar Menu
+  menuOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', flexDirection: 'row' },
+  menuSideBar: { width: width * 0.8, backgroundColor: '#fff', height: '100%', borderTopRightRadius: 30, borderBottomRightRadius: 30, overflow: 'hidden' },
+  menuHeader: { padding: 30, paddingTop: 70, backgroundColor: '#FFF3E0', alignItems: 'center' },
+  avatarCircle: { width: 90, height: 90, borderRadius: 45, backgroundColor: '#FF6F00', justifyContent: 'center', alignItems: 'center', marginBottom: 15, borderWidth: 4, borderColor: '#fff', elevation: 10 },
+  avatarText: { color: '#fff', fontSize: 38, fontWeight: 'bold' },
+  menuName: { fontSize: 22, fontWeight: 'bold', color: '#2D3436' },
+  menuEmail: { color: '#636E72', fontSize: 13, marginTop: 4 },
+  menuBody: { padding: 20, flex: 1 },
+  menuItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 10, borderRadius: 12, marginBottom: 5 },
+  menuItemIcon: { marginRight: 15 },
+  menuItemText: { fontSize: 16, fontWeight: '600', color: '#2D3436' },
+  menuSpacer: { flex: 1 },
+  logoutBtn: { flexDirection: 'row', alignItems: 'center', paddingVertical: 18, paddingHorizontal: 10, borderTopWidth: 1, borderTopColor: '#F1F2F6' },
+  
+  // Modals
+  modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'center', alignItems: 'center' },
+  modalContent: { backgroundColor: '#fff', borderRadius: 30, padding: 25, width: '90%', maxHeight: '75%', elevation: 20 },
+  modalTitle: { textAlign: 'center', fontWeight: 'bold', marginBottom: 20, fontSize: 18, color: '#2D3436' },
+  langGridItem: { flex: 1, alignItems: 'center', paddingVertical: 20, margin: 8, borderRadius: 20, borderWidth: 1.5, borderColor: '#F1F2F6', backgroundColor: '#FAFAFA', position: 'relative' },
   langGridItemActive: { backgroundColor: '#FFF3E0', borderColor: '#FF6F00' },
-  langNameText: { fontSize: 12, marginTop: 5, fontWeight: '500' },
-  scannerOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  closeScannerBtn: { backgroundColor: '#FF6F00', padding: 15, borderRadius: 25, width: 150, alignItems: 'center', marginTop: 20 },
+  langNameText: { fontSize: 13, marginTop: 10, fontWeight: 'bold', color: '#2D3436' },
+  checkIcon: { position: 'absolute', top: 8, right: 8 },
+
+  // Scanner
+  scannerOverlay: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' },
+  scanTarget: { width: 250, height: 250, borderWidth: 2, borderColor: '#FF6F00', borderRadius: 30, borderStyle: 'dashed' },
+  scanText: { color: '#fff', marginTop: 30, fontSize: 16, fontWeight: '500' },
+  closeScannerBtn: { position: 'absolute', top: 60, right: 30, backgroundColor: 'rgba(255,111,0,0.8)', padding: 12, borderRadius: 30 }
 });

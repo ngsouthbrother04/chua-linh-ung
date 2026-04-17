@@ -221,6 +221,8 @@ model User {
   lastSyncAt          DateTime?            @map("last_sync_at")
   lastSeenAt          DateTime?            @map("last_seen_at")
   createdAt           DateTime             @default(now()) @map("created_at")
+  passwordResetToken   String?
+  passwordResetExpires DateTime?
   updatedAt           DateTime             @updatedAt @map("updated_at")
   payments            Payment[]
   authSessions        AuthSession[]

@@ -24,6 +24,7 @@ import {
 import asyncHandler from "../../utils/asyncHandler";
 import ApiError from "../../utils/ApiError";
 import { synthesizePreviewAudioFromText } from "../../services/ttsService";
+import { userController } from "../../controllers/userController";
 
 const router = Router();
 const CALLBACK_TTL_SECONDS = Number(
@@ -315,6 +316,9 @@ router.post(
  * @return {object} 401 - Unauthorized
  * @return {object} 500 - Internal Server Error
  */
+// Định nghĩa các endpoint cho quên mật khẩu
+router.post('/forgot-password', userController.forgotPassword);
+router.post('/reset-password', userController.resetPassword);
 
 router.post(
   "/payment/initiate",

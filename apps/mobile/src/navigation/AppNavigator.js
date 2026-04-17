@@ -23,7 +23,7 @@ export default function AppNavigator() {
           },
         }}
       >
-        {/* 1. Màn hình Login: Ẩn header để giao diện hiện đại hơn */}
+        {/* 1. Màn hình Login: Ẩn header */}
         <Stack.Screen 
           name="Login" 
           component={LoginScreen} 
