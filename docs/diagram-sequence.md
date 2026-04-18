@@ -27,7 +27,7 @@ sequenceDiagram
     API->>DB: Backend -> Database (lưu OTP)
     API->>EmailService: Backend -> Email Service (gửi mail)
     EmailService-->>U: Email -> User (nhận OTP)
-    
+
     Note over U,DB: 1.6. Sequence 2: Reset Password (OTP Verification)
     U->>App: User -> App (Nhập OTP & Mật khẩu mới)
     App->>API: App -> Backend
@@ -49,13 +49,13 @@ sequenceDiagram
     API->>DB: Kiểm tra quyền (Payment Entitlement)
     DB-->>API: Freemium User (Chưa có gói)
     API-->>App: 403 Forbidden (Yêu cầu Nâng cấp)
-    
+
     U->>App: Bấm Mua Phí / Gia hạn (MoMo/VNPay)
     App->>API: POST /api/v1/auth/payment/initiate
     API->>DB: Tạo Payment Log Pending
     API-->>App: 200 OK (Trả về URL thanh toán)
     App->>Pay: Điều hướng (Redirect) tới App Thanh toán
-    
+
     Pay-->>U: Người dùng thao tác trả tiền trên MoMo
     Pay->>API: POST Webhook IPN Callback
     API->>API: Xác thực Chữ ký (Verify Signature)
@@ -142,11 +142,11 @@ sequenceDiagram
     A->>CMS: Sửa lại Master File & Bấm Xuất Bản Nội dung (Publish)
     CMS->>Core: POST /api/v1/admin/pois/:id/publish
     Core->>DB: Gắn cờ is_published = TRUE
-    
+
     Note over A,DB: 4. Kích hoạt Worker Sinh Âm thanh (Trí tuệ Nhân tạo)
     Core->>DB: Thêm Background Job Event (Sinh Audio Mới) vào Queue
     Core-->>CMS: Yêu cầu Xuất bản đã lên lịch!
-    
+
     alt Xử lý Không Đồng bộ (Asynchronous Background Job)
         DB-->>TTS: Consume Job Message
         TTS->>TTS: Dịch Text -> Xử lý Giọng đọc Inference -> File .mp3
@@ -158,4 +158,16 @@ sequenceDiagram
     CMS->>Core: POST /api/v1/admin/sync/invalidate
     Core->>DB: Cập nhật Global Version Index
     Core-->>CMS: Gửi thông báo ép App Tải lại dữ liệu ở lần tiếp
+
+    Note over A,DB: 6. Theo dõi Analytics Hệ thống
+    A->>CMS: Mở Dashboard Analytics
+    CMS->>Core: GET /api/v1/analytics/stats
+    Core->>Core: requireAuth + requireRole(["ADMIN"])
+    Core->>DB: COUNT analytics_event (action = PLAY)
+    Core->>DB: COUNT analytics_event (action = QR_SCAN)
+    Core->>DB: GROUP BY analytics_event.poi_id (topPois)
+    Core->>DB: COUNT DISTINCT session_id từ analytics_presence trong cửa sổ 90s
+    DB-->>Core: plays, qrScans, topPois, onlineSessions
+    Core-->>CMS: 200 OK (data analytics stats)
+    CMS-->>A: Hiển thị KPI vận hành
 ```
