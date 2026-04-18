@@ -261,6 +261,12 @@ function getPoiStatusLabel(poi) {
   return "Đã xuất bản";
 }
 
+function revokeBlobUrl(url) {
+  if (typeof url === "string" && url.startsWith("blob:")) {
+    URL.revokeObjectURL(url);
+  }
+}
+
 export default function AdminDashboard() {
   const sidebarMenus = [
     { key: "overview", label: "Tổng quan", icon: LayoutDashboard },
@@ -291,6 +297,21 @@ export default function AdminDashboard() {
   const [userPageSize, setUserPageSize] = useState(10);
   const [poiTypeFilter, setPoiTypeFilter] = useState("ALL");
   const [pendingUserAction, setPendingUserAction] = useState(null);
+  const [activePoiActionId, setActivePoiActionId] = useState("");
+  const [isPoiEditModalOpen, setIsPoiEditModalOpen] = useState(false);
+  const [isSavingPoiEdit, setIsSavingPoiEdit] = useState(false);
+  const [poiEditError, setPoiEditError] = useState("");
+  const [poiEditImageFile, setPoiEditImageFile] = useState(null);
+  const [poiEditImagePreviewUrl, setPoiEditImagePreviewUrl] = useState("");
+  const [poiEditForm, setPoiEditForm] = useState({
+    id: "",
+    name: "",
+    description: "",
+    type: "FOOD",
+    latitude: "",
+    longitude: "",
+    radius: "120",
+  });
   const [activeSection, setActiveSection] = useState("overview");
   const [editingPackageCode, setEditingPackageCode] = useState("");
   const [packageForm, setPackageForm] = useState({
@@ -305,6 +326,12 @@ export default function AdminDashboard() {
 
   const storedToken = getStoredToken();
   const userRole = storedToken ? getRoleFromToken(storedToken) : "USER";
+
+  useEffect(() => {
+    return () => {
+      revokeBlobUrl(poiEditImagePreviewUrl);
+    };
+  }, [poiEditImagePreviewUrl]);
 
   useEffect(() => {
     let cancelled = false;
@@ -670,6 +697,263 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleEditPoi = (poiId) => {
+    const poi = adminPois.find((item) => item.id === poiId);
+    if (!poi) {
+      setLoadError("Không tìm thấy POI để chỉnh sửa.");
+      return;
+    }
+    setPoiEditError("");
+    setPoiEditImageFile(null);
+    revokeBlobUrl(poiEditImagePreviewUrl);
+    setPoiEditImagePreviewUrl(
+      typeof poi.image === "string" ? poi.image.trim() : "",
+    );
+    setPoiEditForm({
+      id: poi.id,
+      name: pickLocalizedText(poi.name) || "",
+      description: pickLocalizedText(poi.description) || "",
+      type: String(poi.type || "FOOD").toUpperCase(),
+      latitude:
+        poi.latitude !== undefined && poi.latitude !== null
+          ? String(poi.latitude)
+          : "",
+      longitude:
+        poi.longitude !== undefined && poi.longitude !== null
+          ? String(poi.longitude)
+          : "",
+      radius:
+        poi.radius !== undefined && poi.radius !== null
+          ? String(poi.radius)
+          : "120",
+    });
+    setIsPoiEditModalOpen(true);
+  };
+
+  const closePoiEditModal = () => {
+    revokeBlobUrl(poiEditImagePreviewUrl);
+    setIsPoiEditModalOpen(false);
+    setPoiEditError("");
+    setPoiEditImageFile(null);
+    setPoiEditImagePreviewUrl("");
+    setPoiEditForm({
+      id: "",
+      name: "",
+      description: "",
+      type: "FOOD",
+      latitude: "",
+      longitude: "",
+      radius: "120",
+    });
+  };
+
+  const handlePoiEditFieldChange = (field, value) => {
+    setPoiEditForm((current) => ({
+      ...current,
+      [field]: value,
+    }));
+  };
+
+  const handlePickPoiEditImage = (event) => {
+    const nextFile = event.target.files?.[0] || null;
+
+    if (!nextFile) {
+      revokeBlobUrl(poiEditImagePreviewUrl);
+      setPoiEditImageFile(null);
+      setPoiEditImagePreviewUrl("");
+      return;
+    }
+
+    if (!nextFile.type.startsWith("image/")) {
+      setPoiEditError("Chỉ chấp nhận file ảnh hợp lệ.");
+      event.target.value = "";
+      return;
+    }
+
+    revokeBlobUrl(poiEditImagePreviewUrl);
+    setPoiEditError("");
+    setPoiEditImageFile(nextFile);
+    setPoiEditImagePreviewUrl(URL.createObjectURL(nextFile));
+  };
+
+  const handleTogglePoiPublish = async (poiId, shouldPublish) => {
+    const poi = adminPois.find((item) => item.id === poiId);
+    if (!poi) {
+      setLoadError("Không tìm thấy POI để cập nhật trạng thái publish.");
+      return;
+    }
+
+    try {
+      setActivePoiActionId(poiId);
+      await fetchJson(
+        `/api/v1/admin/pois/${poiId}/${shouldPublish ? "publish" : "unpublish"}`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${storedToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            reason: shouldPublish
+              ? "Admin publish POI từ dashboard"
+              : "Admin unpublish POI từ dashboard",
+          }),
+        },
+      );
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error
+          ? error.message
+          : "Không thể cập nhật trạng thái publish của POI.",
+      );
+    } finally {
+      setActivePoiActionId("");
+    }
+  };
+
+  const handleSubmitPoiEdit = async (event) => {
+    event.preventDefault();
+
+    const poiId = poiEditForm.id;
+    const name = poiEditForm.name.trim();
+    const description = poiEditForm.description.trim();
+    const type = String(poiEditForm.type || "")
+      .trim()
+      .toUpperCase();
+    const latitude = Number(poiEditForm.latitude);
+    const longitude = Number(poiEditForm.longitude);
+    const radius = Number(poiEditForm.radius);
+
+    if (!poiId) {
+      setPoiEditError("Thiếu POI id cần cập nhật.");
+      return;
+    }
+
+    if (!name || !description) {
+      setPoiEditError("Vui lòng nhập tên và mô tả POI.");
+      return;
+    }
+
+    if (!["FOOD", "DRINK", "SNACK", "WC"].includes(type)) {
+      setPoiEditError("Loại POI không hợp lệ.");
+      return;
+    }
+
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
+      setPoiEditError("Latitude không hợp lệ (phạm vi -90 đến 90).");
+      return;
+    }
+
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
+      setPoiEditError("Longitude không hợp lệ (phạm vi -180 đến 180).");
+      return;
+    }
+
+    if (!Number.isFinite(radius) || radius <= 0) {
+      setPoiEditError("Bán kính phải là số dương.");
+      return;
+    }
+
+    try {
+      setIsSavingPoiEdit(true);
+      setActivePoiActionId(poiId);
+      setPoiEditError("");
+
+      await fetchJson(`/api/v1/admin/pois/${poiId}`, {
+        method: "PUT",
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: { vi: name },
+          description: { vi: description },
+          type,
+          latitude,
+          longitude,
+          radius,
+          reason: "Admin cập nhật POI từ dashboard",
+        }),
+      });
+
+      if (poiEditImageFile) {
+        const formData = new FormData();
+        formData.append("image", poiEditImageFile);
+
+        const uploadResponse = await fetch(
+          buildApiUrl(`/api/v1/admin/pois/${poiId}/image/upload`),
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${storedToken}`,
+            },
+            body: formData,
+          },
+        );
+
+        if (!uploadResponse.ok) {
+          let uploadMessage = `Upload ảnh thất bại (${uploadResponse.status}).`;
+          try {
+            const uploadPayload = await uploadResponse.json();
+            uploadMessage =
+              uploadPayload?.message || uploadPayload?.error || uploadMessage;
+          } catch {
+            const uploadText = await uploadResponse.text();
+            if (uploadText) {
+              uploadMessage = uploadText;
+            }
+          }
+          throw new Error(uploadMessage);
+        }
+      }
+
+      closePoiEditModal();
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setPoiEditError(
+        error instanceof Error ? error.message : "Không thể cập nhật POI.",
+      );
+    } finally {
+      setIsSavingPoiEdit(false);
+      setActivePoiActionId("");
+    }
+  };
+
+  const handleDeletePoi = async (poiId) => {
+    const poi = adminPois.find((item) => item.id === poiId);
+    if (!poi) {
+      setLoadError("Không tìm thấy POI để xóa.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Bạn có chắc muốn xóa POI "${pickLocalizedText(poi.name) || poiId}"?`,
+    );
+    if (!confirmed) return;
+
+    try {
+      setActivePoiActionId(poiId);
+      await fetchJson(`/api/v1/admin/pois/${poiId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${storedToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          reason: "Admin xóa POI từ dashboard",
+        }),
+      });
+      setReloadTick((tick) => tick + 1);
+    } catch (error) {
+      setLoadError(
+        error instanceof Error ? error.message : "Không thể xóa POI.",
+      );
+    } finally {
+      setActivePoiActionId("");
+    }
+  };
+
   const totalPois = adminPois.length;
   const publishedPois = adminPois.filter((poi) => poi.isPublished).length;
 
@@ -712,6 +996,7 @@ export default function AdminDashboard() {
         id: poi.id,
         type: poi.type || "POI",
         name: pickLocalizedText(poi.name) || "POI chưa đặt tên",
+        isPublished: Boolean(poi.isPublished),
         version: `v${poi.contentVersion ?? 1}`,
         status: getPoiStatusLabel(poi),
         updated: formatRelativeTime(poi.updatedAt),
@@ -1837,7 +2122,7 @@ export default function AdminDashboard() {
                   ) : (
                     queueRows.map((item) => (
                       <div
-                        key={`${item.type}-${item.name}`}
+                        key={item.id}
                         className="grid grid-cols-[0.8fr_2fr_0.7fr_0.9fr_0.9fr_1fr] items-center gap-3 px-4 py-4 text-sm"
                       >
                         <div className="font-semibold text-white/80">
@@ -1859,12 +2144,39 @@ export default function AdminDashboard() {
                         </div>
                         <div className="text-white/60">{item.updated}</div>
                         <div className="text-right">
-                          <button
-                            type="button"
-                            className="inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
-                          >
-                            Xem
-                          </button>
+                          <div className="inline-flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => handleEditPoi(item.id)}
+                              disabled={activePoiActionId === item.id}
+                              className="inline-flex items-center gap-2 rounded-2xl border border-cyan-300/30 bg-cyan-400/10 px-3 py-2 text-xs font-semibold text-cyan-100 transition hover:bg-cyan-400/15 disabled:opacity-50"
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleTogglePoiPublish(
+                                  item.id,
+                                  !item.isPublished,
+                                )
+                              }
+                              disabled={activePoiActionId === item.id}
+                              className="inline-flex items-center gap-2 rounded-2xl border border-emerald-300/30 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100 transition hover:bg-emerald-400/15 disabled:opacity-50"
+                            >
+                              {item.isPublished ? "Unpublish" : "Publish"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDeletePoi(item.id)}
+                              disabled={activePoiActionId === item.id}
+                              className="inline-flex items-center gap-2 rounded-2xl border border-rose-300/30 bg-rose-400/10 px-3 py-2 text-xs font-semibold text-rose-100 transition hover:bg-rose-400/15 disabled:opacity-50"
+                            >
+                              {activePoiActionId === item.id
+                                ? "Đang xử lý..."
+                                : "Xóa"}
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -1939,6 +2251,198 @@ export default function AdminDashboard() {
                   : confirmDialogContent.confirmText}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {isPoiEditModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto px-4 py-6 md:items-center">
+          <button
+            type="button"
+            aria-label="Đóng chỉnh sửa POI"
+            className="absolute inset-0 bg-slate-950/75 backdrop-blur-sm"
+            onClick={closePoiEditModal}
+            disabled={isSavingPoiEdit}
+          />
+
+          <div className="relative z-10 w-full max-w-3xl overflow-hidden rounded-3xl border border-white/10 bg-slate-900/95 shadow-[0_24px_80px_rgba(2,6,23,0.45)]">
+            <div className="border-b border-white/10 px-5 py-4 md:px-6">
+              <h3 className="text-xl font-black text-white">Chỉnh sửa POI</h3>
+              <p className="mt-1 text-sm text-white/65">ID: {poiEditForm.id}</p>
+            </div>
+
+            <form
+              className="max-h-[75vh] space-y-4 overflow-y-auto px-5 py-4 md:px-6"
+              onSubmit={handleSubmitPoiEdit}
+            >
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                  Ảnh POI
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handlePickPoiEditImage}
+                  className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition file:mr-3 file:rounded-md file:border-0 file:bg-cyan-100 file:px-3 file:py-1 file:text-cyan-800"
+                />
+
+                {poiEditImagePreviewUrl ? (
+                  <div className="mt-3 rounded-2xl border border-white/10 bg-black/10 p-3">
+                    <p className="mb-2 text-xs font-semibold text-cyan-100/80">
+                      {poiEditImageFile
+                        ? "Ảnh mới sẽ được upload"
+                        : "Ảnh hiện tại"}
+                    </p>
+                    <img
+                      src={poiEditImagePreviewUrl}
+                      alt="POI preview"
+                      className="h-52 w-full rounded-xl object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        revokeBlobUrl(poiEditImagePreviewUrl);
+                        setPoiEditImageFile(null);
+                        setPoiEditImagePreviewUrl("");
+                      }}
+                      className="mt-3 rounded-xl border border-white/15 bg-white/8 px-3 py-2 text-xs font-semibold text-white/80 transition hover:bg-white/12"
+                    >
+                      {poiEditImageFile ? "Bỏ chọn ảnh mới" : "Ẩn preview ảnh"}
+                    </button>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-xs text-white/45">
+                    Chưa có ảnh preview. Bạn có thể chọn ảnh mới để thay thế ảnh
+                    hiện tại.
+                  </p>
+                )}
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Tên POI
+                    </span>
+                    <input
+                      type="text"
+                      value={poiEditForm.name}
+                      onChange={(e) =>
+                        handlePoiEditFieldChange("name", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Loại POI
+                    </span>
+                    <select
+                      value={poiEditForm.type}
+                      onChange={(e) =>
+                        handlePoiEditFieldChange("type", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    >
+                      <option value="FOOD">FOOD</option>
+                      <option value="DRINK">DRINK</option>
+                      <option value="SNACK">SNACK</option>
+                      <option value="WC">WC</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Latitude
+                    </span>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={poiEditForm.latitude}
+                      onChange={(e) =>
+                        handlePoiEditFieldChange("latitude", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Longitude
+                    </span>
+                    <input
+                      type="number"
+                      step="0.000001"
+                      value={poiEditForm.longitude}
+                      onChange={(e) =>
+                        handlePoiEditFieldChange("longitude", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                      Bán kính (m)
+                    </span>
+                    <input
+                      type="number"
+                      min="1"
+                      value={poiEditForm.radius}
+                      onChange={(e) =>
+                        handlePoiEditFieldChange("radius", e.target.value)
+                      }
+                      className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                    />
+                  </label>
+                </div>
+              </div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/10 p-4">
+                <label className="block">
+                  <span className="mb-2 block text-xs font-semibold uppercase tracking-[0.18em] text-white/45">
+                    Mô tả
+                  </span>
+                  <textarea
+                    rows="4"
+                    value={poiEditForm.description}
+                    onChange={(e) =>
+                      handlePoiEditFieldChange("description", e.target.value)
+                    }
+                    className="w-full rounded-2xl border border-white/10 bg-slate-950/55 px-4 py-3 text-sm text-white outline-none transition focus:border-cyan-300/40"
+                  />
+                </label>
+              </div>
+
+              {poiEditError && (
+                <div className="rounded-2xl border border-rose-300/20 bg-rose-400/10 p-3 text-sm text-rose-100">
+                  {poiEditError}
+                </div>
+              )}
+
+              <div className="sticky bottom-0 mt-2 flex justify-end gap-3 border-t border-white/10 bg-slate-900/95 px-1 py-3">
+                <button
+                  type="button"
+                  onClick={closePoiEditModal}
+                  disabled={isSavingPoiEdit}
+                  className="rounded-2xl border border-white/15 bg-white/8 px-4 py-2.5 text-sm font-semibold text-white/80 transition hover:bg-white/12 disabled:opacity-50"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingPoiEdit}
+                  className="rounded-2xl bg-linear-to-r from-cyan-500 to-sky-500 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-cyan-500/20 transition hover:brightness-105 disabled:opacity-50"
+                >
+                  {isSavingPoiEdit ? "Đang lưu..." : "Lưu thay đổi"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

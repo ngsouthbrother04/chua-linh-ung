@@ -40,6 +40,13 @@ const POI_TYPE_LABEL = {
   WC: "WC",
 };
 
+const POI_TYPE_ICON = {
+  FOOD: "🍜",
+  DRINK: "🥤",
+  SNACK: "🍢",
+  WC: "🚻",
+};
+
 const resolvePrimaryAudioUrl = (audioUrls, language) => {
   if (!audioUrls || typeof audioUrls !== "object") return "";
 
@@ -120,6 +127,8 @@ export default function MapComponent() {
           categoryLabel:
             POI_TYPE_LABEL[String(poi.type || "").toUpperCase()] ||
             String(poi.type || "POI"),
+          categoryIcon:
+            POI_TYPE_ICON[String(poi.type || "").toUpperCase()] || "📍",
           audioUrl,
         };
       }),
@@ -472,7 +481,7 @@ export default function MapComponent() {
                   </p>
 
                   <div className="inline-flex items-center gap-1.5 rounded-full bg-orange-50 px-2.5 py-1 mb-2">
-                    <span className="text-xs">🍜</span>
+                    <span className="text-xs">{poi.categoryIcon}</span>
                     <span className="text-orange-500 font-semibold text-xs">
                       {poi.categoryLabel}
                     </span>

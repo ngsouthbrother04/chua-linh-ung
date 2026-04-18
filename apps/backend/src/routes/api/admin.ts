@@ -1,4 +1,5 @@
 import { Router } from "express";
+import multer from "multer";
 import asyncHandler from "../../utils/asyncHandler";
 import ApiError from "../../utils/ApiError";
 import {
@@ -17,9 +18,11 @@ import {
   invalidateSyncManifest,
   purgeSoftDeletedPois,
   publishAdminPoi,
+  unpublishAdminPoi,
   updateAdminPoi,
   updateAdminTour,
 } from "../../services/poiAdminService";
+import { uploadPoiImage } from "../../services/imageService";
 import {
   getPartnerRegistrationRequestById,
   listPartnerRegistrationRequests,
@@ -44,6 +47,28 @@ import {
 } from "../../services/paymentPackageService";
 
 const router = Router();
+const imageUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: Number(process.env.CLOUDINARY_MAX_IMAGE_BYTES ?? 5 * 1024 * 1024),
+  },
+});
+
+function handleImageUpload(req: any, res: any, next: any) {
+  imageUpload.single("image")(req, res, (err: unknown) => {
+    if (err instanceof multer.MulterError) {
+      if (err.code === "LIMIT_FILE_SIZE") {
+        next(new ApiError(400, "Kich thuoc anh vuot qua gioi han cho phep."));
+        return;
+      }
+
+      next(new ApiError(400, "Upload anh khong hop le."));
+      return;
+    }
+
+    next(err as any);
+  });
+}
 
 async function assertAdminAccess(req: {
   headers: Record<string, unknown>;
@@ -237,6 +262,57 @@ router.post(
       message: "Publish POI thành công.",
       ...result,
       ttsQueued: ttsResult.queued,
+    });
+  }),
+);
+
+router.post(
+  "/pois/:id/unpublish",
+  asyncHandler(async (req, res) => {
+    await assertAdminAccess(req);
+
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
+    if (!poiId) {
+      throw new ApiError(400, "Thiếu POI id.");
+    }
+
+    const result = await unpublishAdminPoi(
+      poiId,
+      getAdminActionContext(req as never),
+    );
+
+    return res.status(200).json({
+      message: "Unpublish POI thành công.",
+      ...result,
+    });
+  }),
+);
+
+router.post(
+  "/pois/:id/image/upload",
+  handleImageUpload,
+  asyncHandler(async (req, res) => {
+    const auth = await assertAdminAccess(req);
+
+    const poiId = typeof req.params.id === "string" ? req.params.id.trim() : "";
+    if (!poiId) {
+      throw new ApiError(400, "Thiếu POI id cần upload ảnh.");
+    }
+
+    if (!req.file) {
+      throw new ApiError(400, "Thiếu file ảnh với field image.");
+    }
+
+    if (!req.file.mimetype.startsWith("image/")) {
+      throw new ApiError(400, "Chi chap nhan file anh hop le.");
+    }
+
+    await getAdminPoiById(poiId, { actorId: auth.actorId, role: "ADMIN" });
+    const result = await uploadPoiImage(poiId, req.file);
+
+    return res.status(200).json({
+      message: "Upload ảnh thành công.",
+      ...result,
     });
   }),
 );

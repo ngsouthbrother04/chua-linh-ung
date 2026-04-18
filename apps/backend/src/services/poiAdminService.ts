@@ -1227,6 +1227,72 @@ export async function publishAdminPoi(
   return result;
 }
 
+export async function unpublishAdminPoi(
+  poiId: string,
+  context?: AdminActionContext,
+  dbClient: DbClient = prisma,
+): Promise<PublishAdminPoiResult> {
+  const existingPoi = await dbClient.pointOfInterest.findFirst({
+    where: { id: poiId, deletedAt: null },
+    select: { id: true },
+  });
+
+  if (!existingPoi) {
+    throw new ApiError(404, "Không tìm thấy POI.");
+  }
+
+  const result = await withOptionalTransaction(dbClient, async (tx) => {
+    const updatedPoi = await tx.pointOfInterest.update({
+      where: { id: poiId },
+      data: {
+        isPublished: false,
+        publishedAt: null,
+      },
+      select: {
+        id: true,
+        name: true,
+        description: true,
+        audioUrls: true,
+        latitude: true,
+        longitude: true,
+        type: true,
+        image: true,
+        radius: true,
+        creatorId: true,
+        isPublished: true,
+        publishedAt: true,
+        deletedAt: true,
+        contentVersion: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    const syncVersion = await bumpSyncVersion(tx);
+
+    return {
+      ...toAdminPoiRecord(updatedPoi),
+      syncVersion,
+    };
+  });
+
+  const action = normalizeActionContext(context);
+  await recordAdminAuditEvent({
+    action: "poi.unpublish",
+    entity: "poi",
+    entityId: poiId,
+    actor: action.actor,
+    reason: action.reason,
+    source: action.source,
+    metadata: {
+      syncVersion: result.syncVersion,
+      contentVersion: result.contentVersion,
+    },
+  });
+
+  return result;
+}
+
 export async function invalidateSyncManifest(
   dbClient: DbClient = prisma,
 ): Promise<InvalidateSyncResult> {
