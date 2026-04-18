@@ -359,7 +359,29 @@ export function useAnalytics() {
         .catch((err) => console.error("Heartbeat failed:", err));
     }, 30000);
 
-    return () => clearInterval(interval);
+    const sendOffline = () => {
+      apiClient.analytics
+        .sendOffline()
+        .catch((err) => console.error("Offline presence failed:", err));
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "hidden") {
+        sendOffline();
+      }
+    };
+
+    window.addEventListener("pagehide", sendOffline);
+    window.addEventListener("beforeunload", sendOffline);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("pagehide", sendOffline);
+      window.removeEventListener("beforeunload", sendOffline);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      sendOffline();
+    };
   }, []);
 
   return { trackEvent };

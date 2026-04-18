@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   processBatchEvents,
   processPresenceHeartbeat,
+  processPresenceOffline,
   getAnalyticsStats,
 } from "../../services/analyticsService";
 import {
@@ -80,6 +81,45 @@ router.post(
       sessionId,
       language,
       timestamp: Number.isFinite(timestamp) ? timestamp : Date.now(),
+    });
+
+    return res.status(200).json({
+      status: "success",
+      ...result,
+    });
+  }),
+);
+
+/**
+ * POST /api/v1/analytics/presence/offline
+ * @summary Mark user presence offline
+ * @description Remove current device/session presence when user exits app.
+ * @tags Analytics
+ * @param {object} request.body.required - Presence offline payload
+ * @param {string} request.body.deviceId - Unique device identifier
+ * @param {string} request.body.sessionId - Optional session identifier
+ * @return {object} 200 - Success response with removal result
+ * @return {object} 400 - Invalid payload
+ * @return {object} 401 - Unauthorized
+ * @return {object} 500 - Internal Server Error
+ */
+router.post(
+  "/presence/offline",
+  requireAuth,
+  requireRole(["USER"]),
+  asyncHandler(async (req: AuthRequest, res) => {
+    const sessionId =
+      typeof req.user?.sid === "string" && req.user.sid.trim()
+        ? req.user.sid.trim()
+        : typeof req.body?.sessionId === "string"
+          ? req.body.sessionId.trim()
+          : "";
+    const deviceId =
+      typeof req.body?.deviceId === "string" ? req.body.deviceId.trim() : "";
+
+    const result = await processPresenceOffline({
+      deviceId,
+      sessionId: sessionId || undefined,
     });
 
     return res.status(200).json({

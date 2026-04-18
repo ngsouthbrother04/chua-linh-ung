@@ -19,7 +19,7 @@ import MapView, { Marker, PROVIDER_GOOGLE, Circle } from "react-native-maps";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Speech from "expo-speech";
 import { CommonActions } from "@react-navigation/native";
-import API, { sendPresenceHeartbeat } from "../api/api";
+import API, { sendPresenceHeartbeat, sendPresenceOffline } from "../api/api";
 import { autoTranslate } from "../utils/translator";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import { Ionicons } from "@expo/vector-icons";
@@ -100,6 +100,15 @@ export default function HomeScreen({ navigation }) {
   useEffect(() => {
     let isMounted = true;
     let heartbeatInterval = null;
+    let previousState = AppState.currentState;
+
+    const pingOffline = async () => {
+      try {
+        await sendPresenceOffline();
+      } catch (error) {
+        console.log("Không gửi được offline presence:", error);
+      }
+    };
 
     const pingPresence = async () => {
       if (!isMounted) {
@@ -119,9 +128,15 @@ export default function HomeScreen({ navigation }) {
     const appStateSubscription = AppState.addEventListener(
       "change",
       (nextState) => {
+        if (previousState === "active" && nextState !== "active") {
+          pingOffline();
+        }
+
         if (nextState === "active") {
           pingPresence();
         }
+
+        previousState = nextState;
       },
     );
 
@@ -131,6 +146,7 @@ export default function HomeScreen({ navigation }) {
         clearInterval(heartbeatInterval);
       }
       appStateSubscription.remove();
+      pingOffline();
     };
   }, []);
 
@@ -358,6 +374,11 @@ export default function HomeScreen({ navigation }) {
         text: uiLabels.logout,
         onPress: async () => {
           await Speech.stop();
+          try {
+            await sendPresenceOffline();
+          } catch (error) {
+            console.log("Không gửi được offline presence khi logout:", error);
+          }
           await AsyncStorage.clear();
           navigation.dispatch(
             CommonActions.reset({ index: 0, routes: [{ name: "Login" }] }),

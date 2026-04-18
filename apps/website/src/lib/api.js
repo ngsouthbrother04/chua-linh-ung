@@ -385,6 +385,14 @@ export const analyticsAPI = {
       }),
     }).then((r) => r.json()),
 
+  sendOffline: () =>
+    authFetch(`${API_BASE_URL}/api/v1/analytics/presence/offline`, {
+      method: "POST",
+      body: JSON.stringify({
+        deviceId: getDeviceId(),
+      }),
+    }).then((r) => r.json()),
+
   getStats: () =>
     authFetch(`${API_BASE_URL}/api/v1/analytics/stats`).then((r) => r.json()),
 };

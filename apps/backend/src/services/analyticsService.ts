@@ -19,7 +19,12 @@ export interface PresenceHeartbeatInput {
   language?: string;
 }
 
-const ONLINE_PRESENCE_WINDOW_SECONDS = 90;
+export interface PresenceOfflineInput {
+  deviceId: string;
+  sessionId?: string;
+}
+
+const ONLINE_PRESENCE_WINDOW_SECONDS = 0;
 
 export async function processBatchEvents(
   events: AnalyticsEventInput[],
@@ -90,11 +95,30 @@ export async function processPresenceHeartbeat(
   };
 }
 
-export async function getAnalyticsStats(): Promise<any> {
-  const onlineWindowStart = new Date(
-    Date.now() - ONLINE_PRESENCE_WINDOW_SECONDS * 1000,
-  );
+export async function processPresenceOffline(
+  input: PresenceOfflineInput,
+): Promise<{ removed: boolean }> {
+  if (!input.deviceId) {
+    throw new ApiError(400, "Missing presence offline required fields");
+  }
 
+  const where = input.sessionId
+    ? {
+        deviceId: input.deviceId,
+        sessionId: input.sessionId,
+      }
+    : {
+        deviceId: input.deviceId,
+      };
+
+  const result = await prisma.analyticsPresence.deleteMany({ where });
+
+  return {
+    removed: result.count > 0,
+  };
+}
+
+export async function getAnalyticsStats(): Promise<any> {
   const plays = await prisma.analyticsEvent.count({
     where: { action: AnalyticsAction.PLAY },
   });
@@ -121,7 +145,6 @@ export async function getAnalyticsStats(): Promise<any> {
   >`
     SELECT COUNT(DISTINCT session_id) AS count
     FROM analytics_presence
-    WHERE last_heartbeat_at >= ${onlineWindowStart}
   `;
 
   const onlineSessions = Number(onlineSessionRows[0]?.count ?? 0);

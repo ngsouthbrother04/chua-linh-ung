@@ -64,10 +64,34 @@ async function sendPresenceHeartbeat({ language = "vi" } = {}) {
   return response.data;
 }
 
+async function sendPresenceOffline() {
+  const token = await AsyncStorage.getItem("userToken");
+  if (!token) {
+    return null;
+  }
+
+  const deviceId = await ensureDeviceId();
+  const response = await API.post(
+    "/analytics/presence/offline",
+    {
+      deviceId,
+      sessionId: await getStoredSessionId(),
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+
+  return response.data;
+}
+
 export default API;
 export {
   ensureDeviceId,
   getStoredSessionId,
   saveSessionContext,
   sendPresenceHeartbeat,
+  sendPresenceOffline,
 };

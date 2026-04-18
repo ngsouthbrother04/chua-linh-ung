@@ -292,7 +292,7 @@ export default function AdminDashboard() {
     qrScans: 0,
     topPois: [],
     onlineSessions: 0,
-    onlineWindowSec: 90,
+    onlineWindowSec: 0,
   });
   const [partnerRegistrationRequests, setPartnerRegistrationRequests] =
     useState([]);
@@ -416,7 +416,7 @@ export default function AdminDashboard() {
           qrScans: 0,
           topPois: [],
           onlineSessions: 0,
-          onlineWindowSec: 90,
+          onlineWindowSec: 0,
         });
         errors.push(`Analytics: ${adminRequests[4].reason.message}`);
       }
@@ -442,6 +442,36 @@ export default function AdminDashboard() {
       cancelled = true;
     };
   }, [reloadTick, storedToken]);
+
+  useEffect(() => {
+    if (!storedToken || userRole !== "ADMIN") {
+      return;
+    }
+
+    let cancelled = false;
+    const adminHeaders = { Authorization: `Bearer ${storedToken}` };
+
+    const pollAnalyticsStats = async () => {
+      try {
+        const response = await fetchJson("/api/v1/analytics/stats", {
+          headers: adminHeaders,
+        });
+
+        if (!cancelled) {
+          setAnalyticsStats(response?.data ?? {});
+        }
+      } catch {
+        // Keep current dashboard stats when transient poll request fails.
+      }
+    };
+
+    const intervalId = window.setInterval(pollAnalyticsStats, 5000);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+    };
+  }, [storedToken, userRole]);
 
   useEffect(() => {
     if (!packageError && !packageSuccess) {
@@ -1015,10 +1045,14 @@ export default function AdminDashboard() {
     }
 
     if (card.key === "onlineUsers") {
+      const onlineWindowSec = Number(analyticsStats.onlineWindowSec || 0);
       return {
         ...card,
         value: formatNumber(analyticsStats.onlineSessions || 0),
-        delta: `Heartbeat trong ${formatNumber(analyticsStats.onlineWindowSec || 90)} giây gần nhất`,
+        delta:
+          onlineWindowSec > 0
+            ? `Heartbeat trong ${formatNumber(onlineWindowSec)} giây gần nhất`
+            : "Dựa trên dữ liệu presence hiện tại",
       };
     }
 
