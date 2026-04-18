@@ -142,9 +142,11 @@ flowchart TD
     ADM_I --> ADM_Q
     ADM_J --> ADM_Q
     ADM_V --> ADM_Q
-    ADM_R --> ADM_S["Gọi API: GET /api/v1/analytics/stats"]
+    ADM_R --> ADM_RA{"Nguồn dữ liệu Analytics?"}
+    ADM_RA -- "Heartbeat từ client USER" --> ADM_RC["POST /api/v1/analytics/presence/heartbeat (requireRole USER) -> upsert analytics_presence"]
+    ADM_RC --> ADM_S["Gọi API: GET /api/v1/analytics/stats"]
     ADM_S --> ADM_T["Backend kiểm tra quyền ADMIN"]
-    ADM_T --> ADM_U["Tổng hợp chỉ số: plays, qrScans, topPois, onlineSessions"]
+    ADM_T --> ADM_U["Tổng hợp chỉ số onlineSessions từ analytics_presence"]
     ADM_U --> ADM_Q
     ADM_D --> ADM_Q
 
@@ -154,5 +156,5 @@ flowchart TD
     classDef decision fill:#EAE4FF,stroke:#B29AF8,stroke-width:1.5px,color:#333;
 
     class ADM_A,ADM_Q startend;
-    class ADM_C,ADM_F,ADM_K,ADM_N decision;
+    class ADM_C,ADM_F,ADM_K,ADM_N,ADM_RA decision;
 ```

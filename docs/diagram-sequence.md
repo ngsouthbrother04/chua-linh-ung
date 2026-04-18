@@ -117,6 +117,7 @@ sequenceDiagram
 sequenceDiagram
     autonumber
     actor A as Admin
+    participant Client as User Client App
     participant CMS as Admin CMS
     participant Core as Master API
     participant TTS as Queue Worker (TTS)
@@ -159,15 +160,18 @@ sequenceDiagram
     Core->>DB: Cập nhật Global Version Index
     Core-->>CMS: Gửi thông báo ép App Tải lại dữ liệu ở lần tiếp
 
-    Note over A,DB: 6. Theo dõi Analytics Hệ thống
+    Note over A,DB: 6. Thu thập Presence từ Client USER
+    Client->>Core: POST /api/v1/analytics/presence/heartbeat
+    Core->>Core: requireAuth + requireRole(["USER"])
+    Core->>DB: Upsert analytics_presence (deviceId, sessionId, lastHeartbeatAt, language)
+    Core-->>Client: 200 OK (onlineNowWindowSec, active5mWindowSec)
+
+    Note over A,DB: 7. Theo dõi Analytics Hệ thống (ADMIN)
     A->>CMS: Mở Dashboard Analytics
     CMS->>Core: GET /api/v1/analytics/stats
     Core->>Core: requireAuth + requireRole(["ADMIN"])
-    Core->>DB: COUNT analytics_event (action = PLAY)
-    Core->>DB: COUNT analytics_event (action = QR_SCAN)
-    Core->>DB: GROUP BY analytics_event.poi_id (topPois)
     Core->>DB: COUNT DISTINCT session_id từ analytics_presence trong cửa sổ 90s
-    DB-->>Core: plays, qrScans, topPois, onlineSessions
+    DB-->>Core: onlineSessions
     Core-->>CMS: 200 OK (data analytics stats)
     CMS-->>A: Hiển thị KPI vận hành
 ```
